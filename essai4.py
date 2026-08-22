@@ -67,6 +67,8 @@ if 'role' not in st.session_state:
     st.session_state.role = None
 if 'username' not in st.session_state:
     st.session_state.username = None
+if 'page' not in st.session_state:
+    st.session_state.page = "patient"  # Par défaut : page patient
 
 # ============================================
 # DICTIONNAIRES DE RÉFÉRENCE
@@ -204,7 +206,6 @@ def attribuer_heure(medecin_nom, data, est_urgent=False):
 def calculer_nouvelle_heure_retard(patient, data):
     """Calcule une nouvelle heure en plaçant le patient en fin de file"""
     # Trouver le dernier patient enregistré
-    dernier_patient = None
     heure_max = None
     
     for p in data["patients"]:
@@ -214,7 +215,6 @@ def calculer_nouvelle_heure_retard(patient, data):
                     h = datetime.fromisoformat(p["heure_rdv"])
                     if heure_max is None or h > heure_max:
                         heure_max = h
-                        dernier_patient = p
                 except:
                     pass
     
@@ -256,50 +256,12 @@ def gerer_retard(patient, data):
     return nouvelle_heure
 
 # ============================================
-# PAGE DE CONNEXION
-# ============================================
-def login_page():
-    st.title("🏥 Gestion Hospitalière Intelligente")
-    st.markdown("---")
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.subheader("🔐 Connexion")
-        role = st.selectbox("Rôle", ["Patient", "Médecin", "Administrateur"])
-        username = st.text_input("Nom d'utilisateur")
-        password = st.text_input("Mot de passe", type="password")
-        
-        if st.button("Se connecter", use_container_width=True):
-            if role == "Patient":
-                st.session_state.logged_in = True
-                st.session_state.role = "patient"
-                st.session_state.username = "patient"
-                st.rerun()
-            elif role == "Médecin":
-                if username in ["Dr. Martin", "Dr. Diallo", "Dr. Kone", "Dr. Bamba", "Dr. Touré", "Dr. Kouadio"]:
-                    if hash_password(password) == PASSWORDS.get(f"medecin{list(PASSWORDS.keys()).index(username) if username in PASSWORDS else ''}", ""):
-                        st.session_state.logged_in = True
-                        st.session_state.role = "medecin"
-                        st.session_state.username = username
-                        st.rerun()
-                    else:
-                        st.error("Mot de passe incorrect")
-                else:
-                    st.error("Médecin non reconnu")
-            elif role == "Administrateur":
-                if username == "admin" and hash_password(password) == PASSWORDS["admin"]:
-                    st.session_state.logged_in = True
-                    st.session_state.role = "admin"
-                    st.session_state.username = "admin"
-                    st.rerun()
-                else:
-                    st.error("Identifiants incorrects")
-
-# ============================================
-# PAGE PATIENT
+# PAGE PATIENT (ACCÈS LIBRE - SANS CODE)
 # ============================================
 def page_patient():
-    st.title("🏥 Prise de rendez-vous")
+    st.title("🏥 Prise de rendez-vous en ligne")
+    st.markdown("---")
+    st.caption("📋 Remplissez le formulaire ci-dessous pour prendre un rendez-vous. Le système analysera vos symptômes et vous attribuera automatiquement une heure de consultation.")
     st.markdown("---")
     
     with st.form("inscription_form"):
@@ -323,36 +285,39 @@ def page_patient():
             height=100
         )
         
-        st.caption("⚠️ Le système analysera automatiquement vos symptômes")
+        st.caption("⚠️ Le système analysera automatiquement vos symptômes pour vous orienter vers le bon service.")
         
-        submitted = st.form_submit_button("📤 Envoyer ma demande")
+        submitted = st.form_submit_button("📤 Envoyer ma demande", use_container_width=True)
         
         if submitted:
             if not nom or not age or not telephone or not symptomes:
-                st.error("Veuillez remplir tous les champs obligatoires (*)")
+                st.error("❌ Veuillez remplir tous les champs obligatoires (*)")
             else:
-                # Analyse
+                # Analyse des symptômes
                 service, score, priorite, symptomes_detectes = analyser_symptomes(symptomes)
                 est_urgent = priorite == "URGENCE"
                 red_flag_detecte = any(flag in symptomes.lower() for flag in RED_FLAGS)
                 
                 if red_flag_detecte or est_urgent:
                     st.warning("🚨 **URGENCE DÉTECTÉE !** Rendez-vous immédiatement aux urgences.")
+                    st.info(f"📋 Symptômes détectés : {', '.join(symptomes_detectes) if symptomes_detectes else 'Aucun'}")
                     st.stop()
                 
+                # Trouver un médecin disponible
                 medecin = trouver_medecin_disponible(service, st.session_state.data, est_urgent)
                 
                 if not medecin:
-                    st.error("Aucun médecin disponible. Veuillez réessayer plus tard.")
+                    st.error("❌ Aucun médecin disponible pour ce service. Veuillez réessayer plus tard.")
                     st.stop()
                 
+                # Attribuer une heure
                 heure_rdv = attribuer_heure(medecin, st.session_state.data, est_urgent)
                 
                 if not heure_rdv:
-                    st.error("Aucun créneau disponible. Veuillez réessayer plus tard.")
+                    st.error("❌ Aucun créneau disponible. Veuillez réessayer plus tard.")
                     st.stop()
                 
-                # Enregistrer
+                # Enregistrer le patient
                 patient_id = st.session_state.data["prochain_id"]
                 st.session_state.data["prochain_id"] += 1
                 
@@ -379,17 +344,25 @@ def page_patient():
                 st.session_state.data["patients"].append(patient)
                 save_data(st.session_state.data)
                 
-                st.success("✅ Rendez-vous confirmé !")
+                st.success("✅ Votre rendez-vous a été confirmé avec succès !")
                 
                 # Affichage pour le patient (sans score ni priorité)
                 st.markdown("---")
-                st.subheader("📋 Votre rendez-vous")
+                st.subheader("📋 Récapitulatif de votre rendez-vous")
                 
                 heure_formatee = heure_rdv.strftime("%H:%M")
                 heure_arrivee = (heure_rdv - timedelta(minutes=10)).strftime("%H:%M")
                 
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**👤 Patient:** {nom}")
+                    st.write(f"**📞 Téléphone:** {telephone}")
+                with col2:
+                    st.write(f"**📅 Date:** {heure_rdv.strftime('%d/%m/%Y')}")
+                    st.write(f"**🕐 Heure:** {heure_formatee}")
+                
                 st.success(f"""
-                ### 📅 Consultation prévue à **{heure_formatee}**
+                ### 🕐 Votre consultation est prévue à **{heure_formatee}**
                 
                 ⚠️ **Arrivez à {heure_arrivee}** (10 minutes avant)
                 
@@ -402,12 +375,12 @@ def page_patient():
                 st.subheader("⏰ En cas de retard")
                 st.info("""
                 **Règle :**
-                - Retard ≤ 10 min → Consultation maintenue
-                - Retard > 10 min → Nouvelle heure calculée automatiquement
+                - Retard ≤ 10 min → Consultation maintenue à l'heure prévue
+                - Retard > 10 min → Nouvelle heure calculée automatiquement en fin de file
                 """)
                 
                 # Simulateur de retard
-                with st.expander("📱 Simuler un retard"):
+                with st.expander("📱 Simuler un retard (démonstration)"):
                     retard_minutes = st.slider("Retard (minutes)", 0, 60, 15)
                     if st.button("Simuler l'arrivée"):
                         if retard_minutes > 10:
@@ -420,6 +393,49 @@ def page_patient():
                             st.success(f"✅ Retard de {retard_minutes} minutes. Consultation maintenue à l'heure prévue.")
 
 # ============================================
+# PAGE DE CONNEXION (Médecins et Admin)
+# ============================================
+def login_page():
+    st.title("🔐 Espace réservé")
+    st.markdown("---")
+    st.caption("Cette section est réservée aux médecins et à l'administration.")
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        role = st.selectbox("Rôle", ["Médecin", "Administrateur"])
+        username = st.text_input("Nom d'utilisateur")
+        password = st.text_input("Mot de passe", type="password")
+        
+        if st.button("Se connecter", use_container_width=True):
+            if role == "Médecin":
+                if username in ["Dr. Martin", "Dr. Diallo", "Dr. Kone", "Dr. Bamba", "Dr. Touré", "Dr. Kouadio"]:
+                    # Vérification du mot de passe
+                    medecin_key = None
+                    for key, val in PASSWORDS.items():
+                        if key.startswith("medecin") and hash_password(password) == val:
+                            medecin_key = key
+                            break
+                    
+                    if medecin_key:
+                        st.session_state.logged_in = True
+                        st.session_state.role = "medecin"
+                        st.session_state.username = username
+                        st.rerun()
+                    else:
+                        st.error("❌ Mot de passe incorrect")
+                else:
+                    st.error("❌ Médecin non reconnu")
+            elif role == "Administrateur":
+                if username == "admin" and hash_password(password) == PASSWORDS["admin"]:
+                    st.session_state.logged_in = True
+                    st.session_state.role = "admin"
+                    st.session_state.username = "admin"
+                    st.rerun()
+                else:
+                    st.error("❌ Identifiants incorrects")
+
+# ============================================
 # PAGE MÉDECIN
 # ============================================
 def page_medecin():
@@ -429,22 +445,25 @@ def page_medecin():
     # Récupérer les patients du médecin
     patients_medecin = [p for p in st.session_state.data["patients"] if p.get("medecin") == st.session_state.username]
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("👥 Patients aujourd'hui", len(patients_medecin))
     with col2:
         en_attente = len([p for p in patients_medecin if p.get("retard_ge", False)])
         st.metric("⏰ En retard", en_attente)
+    with col3:
+        urgences = len([p for p in patients_medecin if p.get("priorite") == "URGENCE"])
+        st.metric("🚨 Urgences", urgences)
     
     st.markdown("---")
-    st.subheader("📋 Liste des patients")
     
     if patients_medecin:
-        # Préparer les données pour affichage
+        st.subheader("📋 Liste des patients")
+        
+        # Préparer les données
         df = pd.DataFrame(patients_medecin)
         df = df.sort_values("heure_rdv")
         
-        # Affichage avec score et priorité (visibles uniquement par le médecin)
         df_affichage = df[[
             "id", "nom", "age", "telephone", "service", 
             "score", "priorite", "heure_rdv", "symptomes"
@@ -466,7 +485,8 @@ def page_medecin():
         
         st.dataframe(
             df_affichage.style.applymap(color_priorite, subset=["Priorité"]),
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True
         )
         
         # Détails d'un patient
@@ -503,7 +523,7 @@ def page_medecin():
             if patient.get('symptomes_detectes'):
                 st.write("**Symptômes détectés:**", ", ".join(patient['symptomes_detectes']))
     else:
-        st.info("Aucun patient pour le moment")
+        st.info("📭 Aucun patient pour le moment")
 
 # ============================================
 # PAGE ADMINISTRATEUR
@@ -580,7 +600,8 @@ def page_admin():
         
         st.dataframe(
             df_affichage.style.applymap(color_priorite, subset=["Priorité"]),
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True
         )
     else:
         st.info("Aucun patient enregistré")
@@ -610,21 +631,22 @@ def page_admin():
     st.markdown("---")
     
     # Export des données
-    if st.button("📥 Exporter les données (CSV)"):
+    with st.expander("📥 Export des données"):
         if data["patients"]:
             df_export = pd.DataFrame(data["patients"])
             csv = df_export.to_csv(index=False)
             st.download_button(
-                label="Télécharger CSV",
+                label="📊 Télécharger CSV",
                 data=csv,
                 file_name=f"export_hopital_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
+                mime="text/csv",
+                use_container_width=True
             )
     
     # Réinitialiser les données
     with st.expander("⚠️ Administration avancée"):
         if st.button("🗑️ Réinitialiser toutes les données", type="secondary"):
-            if st.checkbox("Confirmer la réinitialisation"):
+            if st.checkbox("☑️ Confirmer la réinitialisation"):
                 st.session_state.data = {
                     "patients": [],
                     "consultations": [],
@@ -633,43 +655,60 @@ def page_admin():
                     "prochain_id": 1
                 }
                 save_data(st.session_state.data)
-                st.success("Données réinitialisées avec succès")
+                st.success("✅ Données réinitialisées avec succès")
                 st.rerun()
 
 # ============================================
-# PAGE DE DÉCONNEXION
+# BARRE DE NAVIGATION
 # ============================================
-def logout():
-    for key in ['logged_in', 'role', 'username']:
-        if key in st.session_state:
-            del st.session_state[key]
+st.sidebar.title("🏥 Navigation")
+
+# Le patient accède directement à l'inscription sans connexion
+if st.sidebar.button("📝 Prise de rendez-vous", use_container_width=True):
+    st.session_state.page = "patient"
+    if st.session_state.logged_in:
+        # Déconnecter si un médecin/admin était connecté
+        st.session_state.logged_in = False
+        st.session_state.role = None
+        st.session_state.username = None
     st.rerun()
+
+st.sidebar.markdown("---")
+
+# Espace réservé (Médecins et Admin)
+st.sidebar.subheader("🔐 Espace réservé")
+
+if not st.session_state.logged_in:
+    if st.sidebar.button("👨‍⚕️ Médecins / Admin", use_container_width=True):
+        st.session_state.page = "login"
+        st.rerun()
+else:
+    # Afficher le rôle connecté
+    if st.session_state.role == "medecin":
+        st.sidebar.success(f"👨‍⚕️ {st.session_state.username}")
+    elif st.session_state.role == "admin":
+        st.sidebar.success(f"👑 Administrateur")
+    
+    if st.sidebar.button("🚪 Déconnexion", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.role = None
+        st.session_state.username = None
+        st.session_state.page = "patient"
+        st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.caption("© Gestion Hospitalière Intelligente")
 
 # ============================================
 # ROUTAGE PRINCIPAL
 # ============================================
-if not st.session_state.logged_in:
+if st.session_state.page == "patient":
+    page_patient()
+elif st.session_state.page == "login" and not st.session_state.logged_in:
     login_page()
+elif st.session_state.logged_in and st.session_state.role == "medecin":
+    page_medecin()
+elif st.session_state.logged_in and st.session_state.role == "admin":
+    page_admin()
 else:
-    # Barre de navigation
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        if st.session_state.role == "patient":
-            st.write(f"👤 Patient")
-        elif st.session_state.role == "medecin":
-            st.write(f"👨‍⚕️ {st.session_state.username}")
-        else:
-            st.write(f"👑 Administrateur")
-    with col3:
-        if st.button("🚪 Déconnexion"):
-            logout()
-    
-    st.markdown("---")
-    
-    # Afficher la page selon le rôle
-    if st.session_state.role == "patient":
-        page_patient()
-    elif st.session_state.role == "medecin":
-        page_medecin()
-    elif st.session_state.role == "admin":
-        page_admin()
+    page_patient()  # Par défaut : page patient
