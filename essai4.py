@@ -5,6 +5,7 @@ import re
 import hashlib
 import json
 from pathlib import Path
+import pytz
 
 # ============================================
 # CONFIGURATION DE LA PAGE
@@ -14,6 +15,15 @@ st.set_page_config(
     page_icon="🏥",
     layout="wide"
 )
+
+# ============================================
+# FUSEAU HORAIRE GMT+0
+# ============================================
+TIMEZONE = pytz.UTC
+
+def get_now():
+    """Retourne l'heure actuelle en GMT+0"""
+    return datetime.now(TIMEZONE)
 
 # ============================================
 # GESTION DES MOTS DE PASSE (hashés)
@@ -169,20 +179,18 @@ def attribuer_heure(medecin_nom, data, est_urgent=False):
     planning = data["planning"].get(medecin_nom, {})
     creneaux_urgence = infos["urgences"]
     
+    now = get_now()
+    
     creneaux = []
-    heure_courante = datetime.now().replace(hour=heure_debut, minute=0, second=0, microsecond=0)
-    heure_fin_datetime = datetime.now().replace(hour=heure_fin, minute=0, second=0, microsecond=0)
+    heure_courante = now.replace(hour=heure_debut, minute=0, second=0, microsecond=0)
+    heure_fin_datetime = now.replace(hour=heure_fin, minute=0, second=0, microsecond=0)
     
     # Si l'heure actuelle est après l'heure de début, commencer à l'heure actuelle arrondie
-    now = datetime.now()
     if now > heure_courante:
-        # Arrondir à la prochaine tranche de duree
         minutes = now.minute
         reste = minutes % duree
         if reste > 0:
             minutes = minutes + (duree - reste)
-        else:
-            minutes = minutes
         heure_courante = now.replace(minute=minutes, second=0, microsecond=0)
     
     index = 0
@@ -233,8 +241,9 @@ def calculer_nouvelle_heure_retard(patient, data):
                 except:
                     pass
     
+    now = get_now()
     if heure_max is None:
-        nouvelle_heure = datetime.now() + timedelta(minutes=15)
+        nouvelle_heure = now + timedelta(minutes=15)
     else:
         infos = data["medecins"].get(patient["medecin"], {})
         duree = infos.get("duree", 15)
@@ -270,7 +279,7 @@ def gerer_retard(patient, data):
 def page_patient():
     st.title("🏥 Prise de rendez-vous en ligne")
     st.markdown("---")
-    st.caption("📋 Remplissez le formulaire ci-dessous pour prendre un rendez-vous. Le système analysera vos symptômes et vous attribuera automatiquement une heure de consultation.")
+    st.caption("📋 Remplissez le formulaire ci-dessous pour prendre un rendez-vous. Le système analysera vos symptômes et vous attribuera automatiquement une heure de consultation (GMT+0).")
     st.markdown("---")
     
     # Si un rendez-vous vient d'être confirmé, afficher les détails
@@ -292,10 +301,10 @@ def page_patient():
             st.write(f"**📞 Téléphone:** {patient['telephone']}")
         with col2:
             st.write(f"**📅 Date:** {heure_rdv.strftime('%d/%m/%Y')}")
-            st.write(f"**🕐 Heure:** {heure_formatee}")
+            st.write(f"**🕐 Heure:** {heure_formatee} (GMT+0)")
         
         st.success(f"""
-        ### 🕐 Votre consultation est prévue à **{heure_formatee}**
+        ### 🕐 Votre consultation est prévue à **{heure_formatee}** (GMT+0)
         
         ⚠️ **Arrivez à {heure_arrivee}** (10 minutes avant)
         
@@ -319,7 +328,7 @@ def page_patient():
                 if retard_minutes > 10:
                     nouvelle_heure = gerer_retard(patient, st.session_state.data)
                     st.warning(f"⚠️ Retard de {retard_minutes} minutes détecté.")
-                    st.success(f"🕐 Nouvelle heure de passage : {nouvelle_heure.strftime('%H:%M')}")
+                    st.success(f"🕐 Nouvelle heure de passage : {nouvelle_heure.strftime('%H:%M')} (GMT+0)")
                     st.info(f"📌 Vous serez reçu après le dernier patient enregistré.")
                 else:
                     st.success(f"✅ Retard de {retard_minutes} minutes. Consultation maintenue à l'heure prévue.")
@@ -406,7 +415,7 @@ def page_patient():
                     "heure_rdv_original": heure_rdv.isoformat(),
                     "est_urgent": est_urgent,
                     "retard_ge": False,
-                    "date_inscription": datetime.now().isoformat()
+                    "date_inscription": get_now().isoformat()
                 }
                 
                 st.session_state.data["patients"].append(patient)
@@ -533,10 +542,10 @@ def page_medecin():
                 st.write(f"**Score clinique:** {patient['score']}/12")
                 st.write(f"**Priorité:** {patient['priorite']}")
                 heure = datetime.fromisoformat(patient['heure_rdv']).strftime("%H:%M")
-                st.write(f"**Heure prévue:** {heure}")
+                st.write(f"**Heure prévue:** {heure} (GMT+0)")
                 if patient.get('retard_ge', False):
                     nouvelle_heure = datetime.fromisoformat(patient['nouvelle_heure']).strftime("%H:%M")
-                    st.warning(f"⚠️ Patient en retard - Nouvelle heure: {nouvelle_heure}")
+                    st.warning(f"⚠️ Patient en retard - Nouvelle heure: {nouvelle_heure} (GMT+0)")
             
             st.write("**Symptômes:**", patient['symptomes'])
             if patient.get('symptomes_detectes'):
@@ -559,7 +568,8 @@ def page_admin():
     with col2:
         st.metric("👨‍⚕️ Médecins", len(data["medecins"]))
     with col3:
-        rdv_aujourdhui = len([p for p in data["patients"] if datetime.fromisoformat(p["heure_rdv"]).date() == datetime.now().date()])
+        now = get_now()
+        rdv_aujourdhui = len([p for p in data["patients"] if datetime.fromisoformat(p["heure_rdv"]).date() == now.date()])
         st.metric("📅 Rendez-vous aujourd'hui", rdv_aujourdhui)
     with col4:
         urgences = len([p for p in data["patients"] if p.get("priorite") == "URGENCE"])
@@ -651,7 +661,7 @@ def page_admin():
             st.download_button(
                 label="📊 Télécharger CSV",
                 data=csv,
-                file_name=f"export_hopital_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                file_name=f"export_hopital_{get_now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
@@ -705,7 +715,8 @@ else:
         st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.caption("© Gestion Hospitalière Intelligente")
+st.sidebar.caption("© Gestion Hospitalière Intelligente - GMT+0")
+st.sidebar.caption(f"🕐 {get_now().strftime('%H:%M:%S')} GMT+0")
 
 # ============================================
 # ROUTAGE PRINCIPAL
