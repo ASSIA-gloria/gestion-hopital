@@ -68,7 +68,11 @@ if 'role' not in st.session_state:
 if 'username' not in st.session_state:
     st.session_state.username = None
 if 'page' not in st.session_state:
-    st.session_state.page = "patient"  # Par défaut : page patient
+    st.session_state.page = "patient"
+if 'patient_courant' not in st.session_state:
+    st.session_state.patient_courant = None
+if 'rdv_confirme' not in st.session_state:
+    st.session_state.rdv_confirme = False
 
 # ============================================
 # DICTIONNAIRES DE RÉFÉRENCE
@@ -169,6 +173,18 @@ def attribuer_heure(medecin_nom, data, est_urgent=False):
     heure_courante = datetime.now().replace(hour=heure_debut, minute=0, second=0, microsecond=0)
     heure_fin_datetime = datetime.now().replace(hour=heure_fin, minute=0, second=0, microsecond=0)
     
+    # Si l'heure actuelle est après l'heure de début, commencer à l'heure actuelle arrondie
+    now = datetime.now()
+    if now > heure_courante:
+        # Arrondir à la prochaine tranche de duree
+        minutes = now.minute
+        reste = minutes % duree
+        if reste > 0:
+            minutes = minutes + (duree - reste)
+        else:
+            minutes = minutes
+        heure_courante = now.replace(minute=minutes, second=0, microsecond=0)
+    
     index = 0
     while heure_courante < heure_fin_datetime:
         if est_urgent and index in creneaux_urgence:
@@ -205,7 +221,6 @@ def attribuer_heure(medecin_nom, data, est_urgent=False):
 
 def calculer_nouvelle_heure_retard(patient, data):
     """Calcule une nouvelle heure en plaçant le patient en fin de file"""
-    # Trouver le dernier patient enregistré
     heure_max = None
     
     for p in data["patients"]:
@@ -219,10 +234,8 @@ def calculer_nouvelle_heure_retard(patient, data):
                     pass
     
     if heure_max is None:
-        # Aucun autre patient, prendre l'heure actuelle + 15 min
         nouvelle_heure = datetime.now() + timedelta(minutes=15)
     else:
-        # Ajouter la durée de consultation après le dernier patient
         infos = data["medecins"].get(patient["medecin"], {})
         duree = infos.get("duree", 15)
         nouvelle_heure = heure_max + timedelta(minutes=duree)
@@ -233,7 +246,6 @@ def gerer_retard(patient, data):
     """Gère le retard en recalculant l'heure"""
     nouvelle_heure = calculer_nouvelle_heure_retard(patient, data)
     
-    # Mettre à jour l'heure du patient
     for p in data["patients"]:
         if p.get("id") == patient["id"]:
             p["heure_rdv"] = nouvelle_heure.isoformat()
@@ -241,15 +253,12 @@ def gerer_retard(patient, data):
             p["nouvelle_heure"] = nouvelle_heure.isoformat()
             break
     
-    # Mettre à jour le planning du médecin
     medecin = patient["medecin"]
     if medecin in data["planning"]:
-        # Retirer l'ancien créneau
         for cle, val in list(data["planning"][medecin].items()):
             if isinstance(val, str) and patient["heure_rdv_original"] in val:
                 del data["planning"][medecin][cle]
                 break
-        # Ajouter le nouveau créneau
         data["planning"][medecin][str(len(data["planning"][medecin]))] = nouvelle_heure.isoformat()
     
     save_data(data)
@@ -264,6 +273,65 @@ def page_patient():
     st.caption("📋 Remplissez le formulaire ci-dessous pour prendre un rendez-vous. Le système analysera vos symptômes et vous attribuera automatiquement une heure de consultation.")
     st.markdown("---")
     
+    # Si un rendez-vous vient d'être confirmé, afficher les détails
+    if st.session_state.rdv_confirme and st.session_state.patient_courant:
+        patient = st.session_state.patient_courant
+        
+        st.success("✅ Votre rendez-vous a été confirmé avec succès !")
+        
+        st.markdown("---")
+        st.subheader("📋 Récapitulatif de votre rendez-vous")
+        
+        heure_rdv = datetime.fromisoformat(patient["heure_rdv"])
+        heure_formatee = heure_rdv.strftime("%H:%M")
+        heure_arrivee = (heure_rdv - timedelta(minutes=10)).strftime("%H:%M")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"**👤 Patient:** {patient['nom']}")
+            st.write(f"**📞 Téléphone:** {patient['telephone']}")
+        with col2:
+            st.write(f"**📅 Date:** {heure_rdv.strftime('%d/%m/%Y')}")
+            st.write(f"**🕐 Heure:** {heure_formatee}")
+        
+        st.success(f"""
+        ### 🕐 Votre consultation est prévue à **{heure_formatee}**
+        
+        ⚠️ **Arrivez à {heure_arrivee}** (10 minutes avant)
+        
+        📍 **Service:** {patient['service'].upper()}
+        👨‍⚕️ **Médecin:** {patient['medecin']}
+        """)
+        
+        # Gestion des retards
+        st.markdown("---")
+        st.subheader("⏰ En cas de retard")
+        st.info("""
+        **Règle :**
+        - Retard ≤ 10 min → Consultation maintenue à l'heure prévue
+        - Retard > 10 min → Nouvelle heure calculée automatiquement en fin de file
+        """)
+        
+        # Simulateur de retard (hors formulaire)
+        with st.expander("📱 Simuler un retard (démonstration)"):
+            retard_minutes = st.slider("Retard (minutes)", 0, 60, 15, key="retard_slider")
+            if st.button("Simuler l'arrivée", key="simuler_retard"):
+                if retard_minutes > 10:
+                    nouvelle_heure = gerer_retard(patient, st.session_state.data)
+                    st.warning(f"⚠️ Retard de {retard_minutes} minutes détecté.")
+                    st.success(f"🕐 Nouvelle heure de passage : {nouvelle_heure.strftime('%H:%M')}")
+                    st.info(f"📌 Vous serez reçu après le dernier patient enregistré.")
+                else:
+                    st.success(f"✅ Retard de {retard_minutes} minutes. Consultation maintenue à l'heure prévue.")
+        
+        if st.button("📝 Prendre un nouveau rendez-vous", key="nouveau_rdv"):
+            st.session_state.rdv_confirme = False
+            st.session_state.patient_courant = None
+            st.rerun()
+        
+        return
+    
+    # Formulaire d'inscription
     with st.form("inscription_form"):
         col1, col2 = st.columns(2)
         
@@ -344,53 +412,9 @@ def page_patient():
                 st.session_state.data["patients"].append(patient)
                 save_data(st.session_state.data)
                 
-                st.success("✅ Votre rendez-vous a été confirmé avec succès !")
-                
-                # Affichage pour le patient (sans score ni priorité)
-                st.markdown("---")
-                st.subheader("📋 Récapitulatif de votre rendez-vous")
-                
-                heure_formatee = heure_rdv.strftime("%H:%M")
-                heure_arrivee = (heure_rdv - timedelta(minutes=10)).strftime("%H:%M")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write(f"**👤 Patient:** {nom}")
-                    st.write(f"**📞 Téléphone:** {telephone}")
-                with col2:
-                    st.write(f"**📅 Date:** {heure_rdv.strftime('%d/%m/%Y')}")
-                    st.write(f"**🕐 Heure:** {heure_formatee}")
-                
-                st.success(f"""
-                ### 🕐 Votre consultation est prévue à **{heure_formatee}**
-                
-                ⚠️ **Arrivez à {heure_arrivee}** (10 minutes avant)
-                
-                📍 **Service:** {service.upper()}
-                👨‍⚕️ **Médecin:** {medecin}
-                """)
-                
-                # Gestion des retards
-                st.markdown("---")
-                st.subheader("⏰ En cas de retard")
-                st.info("""
-                **Règle :**
-                - Retard ≤ 10 min → Consultation maintenue à l'heure prévue
-                - Retard > 10 min → Nouvelle heure calculée automatiquement en fin de file
-                """)
-                
-                # Simulateur de retard
-                with st.expander("📱 Simuler un retard (démonstration)"):
-                    retard_minutes = st.slider("Retard (minutes)", 0, 60, 15)
-                    if st.button("Simuler l'arrivée"):
-                        if retard_minutes > 10:
-                            # Recalculer l'heure
-                            nouvelle_heure = gerer_retard(patient, st.session_state.data)
-                            st.warning(f"⚠️ Retard de {retard_minutes} minutes détecté.")
-                            st.success(f"🕐 Nouvelle heure de passage : {nouvelle_heure.strftime('%H:%M')}")
-                            st.info(f"📌 Vous serez reçu après le dernier patient enregistré.")
-                        else:
-                            st.success(f"✅ Retard de {retard_minutes} minutes. Consultation maintenue à l'heure prévue.")
+                st.session_state.patient_courant = patient
+                st.session_state.rdv_confirme = True
+                st.rerun()
 
 # ============================================
 # PAGE DE CONNEXION (Médecins et Admin)
@@ -410,7 +434,6 @@ def login_page():
         if st.button("Se connecter", use_container_width=True):
             if role == "Médecin":
                 if username in ["Dr. Martin", "Dr. Diallo", "Dr. Kone", "Dr. Bamba", "Dr. Touré", "Dr. Kouadio"]:
-                    # Vérification du mot de passe
                     medecin_key = None
                     for key, val in PASSWORDS.items():
                         if key.startswith("medecin") and hash_password(password) == val:
@@ -442,7 +465,6 @@ def page_medecin():
     st.title(f"👨‍⚕️ Espace Médecin - {st.session_state.username}")
     st.markdown("---")
     
-    # Récupérer les patients du médecin
     patients_medecin = [p for p in st.session_state.data["patients"] if p.get("medecin") == st.session_state.username]
     
     col1, col2, col3 = st.columns(3)
@@ -460,7 +482,6 @@ def page_medecin():
     if patients_medecin:
         st.subheader("📋 Liste des patients")
         
-        # Préparer les données
         df = pd.DataFrame(patients_medecin)
         df = df.sort_values("heure_rdv")
         
@@ -472,7 +493,6 @@ def page_medecin():
         df_affichage["heure_rdv"] = pd.to_datetime(df_affichage["heure_rdv"]).dt.strftime("%H:%M")
         df_affichage.columns = ["ID", "Patient", "Âge", "Téléphone", "Service", "Score", "Priorité", "Heure", "Symptômes"]
         
-        # Colorier selon la priorité
         def color_priorite(val):
             if val == "URGENCE":
                 return "background-color: #ff4444; color: white"
@@ -489,7 +509,6 @@ def page_medecin():
             hide_index=True
         )
         
-        # Détails d'un patient
         st.markdown("---")
         st.subheader("🔍 Détails d'un patient")
         
@@ -534,7 +553,6 @@ def page_admin():
     
     data = st.session_state.data
     
-    # Statistiques générales
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("👥 Total patients", len(data["patients"]))
@@ -549,7 +567,6 @@ def page_admin():
     
     st.markdown("---")
     
-    # Graphiques et stats
     col1, col2 = st.columns(2)
     
     with col1:
@@ -572,7 +589,6 @@ def page_admin():
     
     st.markdown("---")
     
-    # Liste de tous les patients
     st.subheader("📋 Tous les patients")
     
     if data["patients"]:
@@ -587,7 +603,6 @@ def page_admin():
         df_affichage["heure_rdv"] = pd.to_datetime(df_affichage["heure_rdv"]).dt.strftime("%H:%M")
         df_affichage.columns = ["ID", "Patient", "Âge", "Téléphone", "Service", "Score", "Priorité", "Médecin", "Heure"]
         
-        # Colorier selon la priorité
         def color_priorite(val):
             if val == "URGENCE":
                 return "background-color: #ff4444; color: white"
@@ -608,7 +623,6 @@ def page_admin():
     
     st.markdown("---")
     
-    # Gestion des médecins
     st.subheader("👨‍⚕️ Gestion des médecins")
     col1, col2 = st.columns(2)
     
@@ -630,7 +644,6 @@ def page_admin():
     
     st.markdown("---")
     
-    # Export des données
     with st.expander("📥 Export des données"):
         if data["patients"]:
             df_export = pd.DataFrame(data["patients"])
@@ -643,7 +656,6 @@ def page_admin():
                 use_container_width=True
             )
     
-    # Réinitialiser les données
     with st.expander("⚠️ Administration avancée"):
         if st.button("🗑️ Réinitialiser toutes les données", type="secondary"):
             if st.checkbox("☑️ Confirmer la réinitialisation"):
@@ -663,11 +675,9 @@ def page_admin():
 # ============================================
 st.sidebar.title("🏥 Navigation")
 
-# Le patient accède directement à l'inscription sans connexion
 if st.sidebar.button("📝 Prise de rendez-vous", use_container_width=True):
     st.session_state.page = "patient"
     if st.session_state.logged_in:
-        # Déconnecter si un médecin/admin était connecté
         st.session_state.logged_in = False
         st.session_state.role = None
         st.session_state.username = None
@@ -675,7 +685,6 @@ if st.sidebar.button("📝 Prise de rendez-vous", use_container_width=True):
 
 st.sidebar.markdown("---")
 
-# Espace réservé (Médecins et Admin)
 st.sidebar.subheader("🔐 Espace réservé")
 
 if not st.session_state.logged_in:
@@ -683,7 +692,6 @@ if not st.session_state.logged_in:
         st.session_state.page = "login"
         st.rerun()
 else:
-    # Afficher le rôle connecté
     if st.session_state.role == "medecin":
         st.sidebar.success(f"👨‍⚕️ {st.session_state.username}")
     elif st.session_state.role == "admin":
@@ -711,4 +719,4 @@ elif st.session_state.logged_in and st.session_state.role == "medecin":
 elif st.session_state.logged_in and st.session_state.role == "admin":
     page_admin()
 else:
-    page_patient()  # Par défaut : page patient
+    page_patient()
