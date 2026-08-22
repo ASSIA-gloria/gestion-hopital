@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import random
 import re
+import hashlib
+import json
+from pathlib import Path
 
 # ============================================
 # CONFIGURATION DE LA PAGE
@@ -14,153 +16,93 @@ st.set_page_config(
 )
 
 # ============================================
-# BASE DE DONNÉES (en mémoire)
+# GESTION DES MOTS DE PASSE (hashés)
 # ============================================
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-# Dictionnaire de correspondance symptômes → service
+# Mots de passe par défaut (à changer en production)
+PASSWORDS = {
+    "admin": hash_password("admin123"),
+    "medecin1": hash_password("doc123"),
+    "medecin2": hash_password("doc123"),
+}
+
+# ============================================
+# BASE DE DONNÉES (fichier JSON)
+# ============================================
+DATA_FILE = "hopital_data.json"
+
+def load_data():
+    if Path(DATA_FILE).exists():
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {
+        "patients": [],
+        "consultations": [],
+        "medecins": {
+            "Dr. Martin": {"specialite": "medecine generale", "heures": [8, 16], "duree": 15, "urgences": [2,5,8,11]},
+            "Dr. Diallo": {"specialite": "medecine generale", "heures": [9, 17], "duree": 15, "urgences": [3,7,10]},
+            "Dr. Kone": {"specialite": "cardiologie", "heures": [8, 14], "duree": 20, "urgences": [1,4,7]},
+            "Dr. Bamba": {"specialite": "pediatrie", "heures": [10, 18], "duree": 15, "urgences": [2,6,9]},
+            "Dr. Touré": {"specialite": "dermatologie", "heures": [8, 12], "duree": 15, "urgences": [2,5]},
+            "Dr. Kouadio": {"specialite": "gynecologie", "heures": [13, 19], "duree": 20, "urgences": [2,6,9]},
+        },
+        "planning": {},
+        "prochain_id": 1
+    }
+
+def save_data(data):
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+
+# ============================================
+# INITIALISATION DES DONNÉES
+# ============================================
+if 'data' not in st.session_state:
+    st.session_state.data = load_data()
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'role' not in st.session_state:
+    st.session_state.role = None
+if 'username' not in st.session_state:
+    st.session_state.username = None
+
+# ============================================
+# DICTIONNAIRES DE RÉFÉRENCE
+# ============================================
 SYMPTONE_TO_SERVICE = {
-    # Cardiologie
-    "douleur thoracique": "cardiologie",
-    "essoufflement": "cardiologie",
-    "palpitations": "cardiologie",
-    "cardiaque": "cardiologie",
-    "poitrine": "cardiologie",
-    
-    # Pneumologie
-    "toux": "pneumologie",
-    "crachat": "pneumologie",
-    "expectoration": "pneumologie",
-    "respiration": "pneumologie",
-    "asthme": "pneumologie",
-    
-    # Neurologie
-    "mal de tête": "neurologie",
-    "migraine": "neurologie",
-    "vertige": "neurologie",
-    "perte de connaissance": "neurologie",
-    "paralysie": "neurologie",
-    "avc": "neurologie",
-    
-    # Gynécologie
-    "règle": "gynecologie",
-    "menstruation": "gynecologie",
-    "grossesse": "gynecologie",
-    "accouchement": "gynecologie",
-    "utérus": "gynecologie",
-    "ovaires": "gynecologie",
-    
-    # Dermatologie
-    "éruption": "dermatologie",
-    "démangeaison": "dermatologie",
-    "bouton": "dermatologie",
-    "peau": "dermatologie",
-    "plaque": "dermatologie",
-    
-    # Gastro-entérologie
-    "ventre": "gastro-enterologie",
-    "estomac": "gastro-enterologie",
-    "nausée": "gastro-enterologie",
-    "vomissement": "gastro-enterologie",
-    "diarrhée": "gastro-enterologie",
-    "constipation": "gastro-enterologie",
-    
-    # Urologie
-    "urine": "urologie",
-    "rénal": "urologie",
-    "rein": "urologie",
-    "vessie": "urologie",
-    
-    # Ophtalmologie
-    "œil": "ophtalmologie",
-    "vue": "ophtalmologie",
-    "vision": "ophtalmologie",
-    
-    # ORL
-    "oreille": "orl",
-    "nez": "orl",
-    "gorge": "orl",
-    "audition": "orl",
+    "douleur thoracique": "cardiologie", "essoufflement": "cardiologie",
+    "palpitations": "cardiologie", "cardiaque": "cardiologie", "poitrine": "cardiologie",
+    "toux": "pneumologie", "crachat": "pneumologie", "expectoration": "pneumologie",
+    "respiration": "pneumologie", "asthme": "pneumologie",
+    "mal de tête": "neurologie", "migraine": "neurologie", "vertige": "neurologie",
+    "perte de connaissance": "neurologie", "paralysie": "neurologie", "avc": "neurologie",
+    "règle": "gynecologie", "menstruation": "gynecologie", "grossesse": "gynecologie",
+    "accouchement": "gynecologie", "utérus": "gynecologie", "ovaires": "gynecologie",
+    "éruption": "dermatologie", "démangeaison": "dermatologie", "bouton": "dermatologie",
+    "peau": "dermatologie", "plaque": "dermatologie",
+    "ventre": "gastro-enterologie", "estomac": "gastro-enterologie", "nausée": "gastro-enterologie",
+    "vomissement": "gastro-enterologie", "diarrhée": "gastro-enterologie", "constipation": "gastro-enterologie",
+    "urine": "urologie", "rénal": "urologie", "rein": "urologie", "vessie": "urologie",
+    "œil": "ophtalmologie", "vue": "ophtalmologie", "vision": "ophtalmologie",
+    "oreille": "orl", "nez": "orl", "gorge": "orl", "audition": "orl",
 }
 
-# Barème de points pour les symptômes
 SYMPTOME_POINTS = {
-    "douleur thoracique": 4,
-    "essoufflement": 3,
-    "perte de connaissance": 5,
-    "paralysie": 5,
-    "avc": 5,
-    "hémorragie": 5,
-    "fracture": 4,
-    "fièvre": 3,
-    "vomissement": 2,
-    "diarrhée": 2,
-    "démangeaison": 1,
-    "éruption": 1,
-    "toux": 1,
-    "mal de tête": 2,
-    "vertige": 2,
-    "palpitations": 3,
+    "douleur thoracique": 4, "essoufflement": 3, "perte de connaissance": 5,
+    "paralysie": 5, "avc": 5, "hémorragie": 5, "fracture": 4, "fièvre": 3,
+    "vomissement": 2, "diarrhée": 2, "démangeaison": 1, "éruption": 1,
+    "toux": 1, "mal de tête": 2, "vertige": 2, "palpitations": 3,
 }
 
-# Liste des médecins avec leurs spécialités et plannings
-MEDECINS = {
-    "Dr. Martin": {
-        "specialite": "medecine generale",
-        "heures": (8, 16),  # 8h - 16h
-        "consultation_duree": 15,  # minutes
-        "creneaux_urgence": [2, 5, 8, 11],  # index des créneaux réservés pour urgences
-        "planning": {}  # sera rempli dynamiquement
-    },
-    "Dr. Diallo": {
-        "specialite": "medecine generale",
-        "heures": (9, 17),
-        "consultation_duree": 15,
-        "creneaux_urgence": [3, 7, 10],
-        "planning": {}
-    },
-    "Dr. Kone": {
-        "specialite": "cardiologie",
-        "heures": (8, 14),
-        "consultation_duree": 20,
-        "creneaux_urgence": [1, 4, 7],
-        "planning": {}
-    },
-    "Dr. Bamba": {
-        "specialite": "pediatrie",
-        "heures": (10, 18),
-        "consultation_duree": 15,
-        "creneaux_urgence": [2, 6, 9],
-        "planning": {}
-    },
-    "Dr. Touré": {
-        "specialite": "dermatologie",
-        "heures": (8, 12),
-        "consultation_duree": 15,
-        "creneaux_urgence": [2, 5],
-        "planning": {}
-    },
-    "Dr. Kouadio": {
-        "specialite": "gynecologie",
-        "heures": (13, 19),
-        "consultation_duree": 20,
-        "creneaux_urgence": [2, 6, 9],
-        "planning": {}
-    },
-}
+RED_FLAGS = ["douleur thoracique", "perte de connaissance", "paralysie", "avc", "hémorragie"]
 
 # ============================================
 # FONCTIONS DE TRAITEMENT
 # ============================================
-
 def analyser_symptomes(texte):
-    """
-    Analyse les symptômes saisis par le patient
-    Retourne: service_deduit, score_priorite, symptomes_detectes
-    """
     texte_lower = texte.lower()
-    mots = re.findall(r'\b\w+\b', texte_lower)
-    
-    # Détection des symptômes et calcul du score
     symptomes_detectes = []
     score = 0
     
@@ -169,10 +111,7 @@ def analyser_symptomes(texte):
             symptomes_detectes.append(symptome)
             score += points
     
-    # Détection du service
-    service_deduit = "medecine generale"  # par défaut
     service_score = {}
-    
     for symptome in symptomes_detectes:
         for mot_cle, service in SYMPTONE_TO_SERVICE.items():
             if symptome == mot_cle or mot_cle in symptome:
@@ -180,11 +119,8 @@ def analyser_symptomes(texte):
                     service_score[service] = 0
                 service_score[service] += SYMPTOME_POINTS.get(symptome, 1)
     
-    # Choisir le service avec le score le plus élevé
-    if service_score:
-        service_deduit = max(service_score, key=service_score.get)
+    service_deduit = max(service_score, key=service_score.get) if service_score else "medecine generale"
     
-    # Classification du score
     if score <= 3:
         priorite = "Faible"
     elif score <= 7:
@@ -196,53 +132,37 @@ def analyser_symptomes(texte):
     
     return service_deduit, score, priorite, symptomes_detectes
 
-
-def trouver_medecin_disponible(service, date_consultation, est_urgent=False):
-    """
-    Trouve le médecin le plus disponible pour un service donné
-    """
+def trouver_medecin_disponible(service, data, est_urgent=False):
     medecins_disponibles = []
-    
-    for nom, infos in MEDECINS.items():
-        # Vérifier si le médecin correspond au service ou est généraliste
+    for nom, infos in data["medecins"].items():
         if infos["specialite"] == service or infos["specialite"] == "medecine generale":
             medecins_disponibles.append(nom)
     
     if not medecins_disponibles:
         return None
     
-    # Si c'est une urgence, chercher le médecin avec le plus de créneaux libres
     if est_urgent:
-        # Priorité aux médecins avec des créneaux d'urgence disponibles
         for nom in medecins_disponibles:
-            infos = MEDECINS[nom]
-            if len(infos["planning"]) < 10:  # capacité raisonnable
+            if nom not in data["planning"] or len(data["planning"][nom]) < 10:
                 return nom
     
-    # Sinon, équilibrage de charge
     charge_min = float('inf')
     medecin_choisi = medecins_disponibles[0]
-    
     for nom in medecins_disponibles:
-        charge = len(MEDECINS[nom]["planning"])
+        charge = len(data["planning"].get(nom, {}))
         if charge < charge_min:
             charge_min = charge
             medecin_choisi = nom
     
     return medecin_choisi
 
-
-def attribuer_heure(medecin_nom, est_urgent=False):
-    """
-    Attribue une heure de rendez-vous pour un médecin donné
-    """
-    infos = MEDECINS[medecin_nom]
+def attribuer_heure(medecin_nom, data, est_urgent=False):
+    infos = data["medecins"][medecin_nom]
     heure_debut, heure_fin = infos["heures"]
-    duree = infos["consultation_duree"]
-    planning = infos["planning"]
-    creneaux_urgence = infos["creneaux_urgence"]
+    duree = infos["duree"]
+    planning = data["planning"].get(medecin_nom, {})
+    creneaux_urgence = infos["urgences"]
     
-    # Générer tous les créneaux possibles
     creneaux = []
     heure_courante = datetime.now().replace(hour=heure_debut, minute=0, second=0, microsecond=0)
     heure_fin_datetime = datetime.now().replace(hour=heure_fin, minute=0, second=0, microsecond=0)
@@ -250,79 +170,138 @@ def attribuer_heure(medecin_nom, est_urgent=False):
     index = 0
     while heure_courante < heure_fin_datetime:
         if est_urgent and index in creneaux_urgence:
-            # Créneau réservé pour les urgences
             creneaux.append(heure_courante)
         elif not est_urgent and index not in creneaux_urgence:
-            # Créneau pour les consultations normales
             creneaux.append(heure_courante)
-        
         heure_courante += timedelta(minutes=duree)
         index += 1
     
-    # Filtrer les créneaux déjà pris
-    creneaux_disponibles = [c for c in creneaux if c not in planning.values()]
+    # Convertir les heures existantes en datetime pour comparaison
+    creneaux_occupes = []
+    for cle, val in planning.items():
+        if isinstance(val, str):
+            try:
+                creneaux_occupes.append(datetime.fromisoformat(val))
+            except:
+                pass
+        elif isinstance(val, datetime):
+            creneaux_occupes.append(val)
+    
+    creneaux_disponibles = [c for c in creneaux if c not in creneaux_occupes]
     
     if not creneaux_disponibles:
         return None
     
-    # Prendre le premier créneau disponible
     heure_rdv = creneaux_disponibles[0]
     
-    # Ajouter au planning du médecin
-    planning[len(planning)] = heure_rdv
+    if medecin_nom not in data["planning"]:
+        data["planning"][medecin_nom] = {}
+    
+    data["planning"][medecin_nom][str(len(data["planning"][medecin_nom]))] = heure_rdv.isoformat()
     
     return heure_rdv
 
-
-def gerer_retard(heure_rdv, heure_arrivee):
-    """
-    Gère les retards des patients
-    """
-    if heure_arrivee is None:
-        return "Rendez-vous confirmé"
+def calculer_nouvelle_heure_retard(patient, data):
+    """Calcule une nouvelle heure en plaçant le patient en fin de file"""
+    # Trouver le dernier patient enregistré
+    dernier_patient = None
+    heure_max = None
     
-    retard = (heure_arrivee - heure_rdv).total_seconds() / 60  # en minutes
+    for p in data["patients"]:
+        if p.get("medecin") == patient["medecin"] and p.get("id") != patient["id"]:
+            if p.get("heure_rdv"):
+                try:
+                    h = datetime.fromisoformat(p["heure_rdv"])
+                    if heure_max is None or h > heure_max:
+                        heure_max = h
+                        dernier_patient = p
+                except:
+                    pass
     
-    if retard <= 10:
-        return f"Retard de {int(retard)} minutes. Vous serez reçu normalement."
+    if heure_max is None:
+        # Aucun autre patient, prendre l'heure actuelle + 15 min
+        nouvelle_heure = datetime.now() + timedelta(minutes=15)
     else:
-        # Ajouter en fin de file
-        return f"⚠️ Retard de {int(retard)} minutes. Rendez-vous annulé. Vous êtes replacé en fin de file."
-
-
-# ============================================
-# INTERFACE STREAMLIT
-# ============================================
-
-st.title("🏥 Système Intelligent de Gestion Hospitalière")
-st.markdown("---")
-
-# Initialisation de l'état de session
-if 'patient_inscrit' not in st.session_state:
-    st.session_state.patient_inscrit = False
-    st.session_state.rdv_attribue = False
-    st.session_state.historique = []
-    st.session_state.nb_patients = 0
-
-# Sidebar - Informations générales
-with st.sidebar:
-    st.header("📊 Tableau de bord")
-    st.metric("👥 Patients enregistrés aujourd'hui", st.session_state.nb_patients)
+        # Ajouter la durée de consultation après le dernier patient
+        infos = data["medecins"].get(patient["medecin"], {})
+        duree = infos.get("duree", 15)
+        nouvelle_heure = heure_max + timedelta(minutes=duree)
     
+    return nouvelle_heure
+
+def gerer_retard(patient, data):
+    """Gère le retard en recalculant l'heure"""
+    nouvelle_heure = calculer_nouvelle_heure_retard(patient, data)
+    
+    # Mettre à jour l'heure du patient
+    for p in data["patients"]:
+        if p.get("id") == patient["id"]:
+            p["heure_rdv"] = nouvelle_heure.isoformat()
+            p["retard_ge"] = True
+            p["nouvelle_heure"] = nouvelle_heure.isoformat()
+            break
+    
+    # Mettre à jour le planning du médecin
+    medecin = patient["medecin"]
+    if medecin in data["planning"]:
+        # Retirer l'ancien créneau
+        for cle, val in list(data["planning"][medecin].items()):
+            if isinstance(val, str) and patient["heure_rdv_original"] in val:
+                del data["planning"][medecin][cle]
+                break
+        # Ajouter le nouveau créneau
+        data["planning"][medecin][str(len(data["planning"][medecin]))] = nouvelle_heure.isoformat()
+    
+    save_data(data)
+    return nouvelle_heure
+
+# ============================================
+# PAGE DE CONNEXION
+# ============================================
+def login_page():
+    st.title("🏥 Gestion Hospitalière Intelligente")
     st.markdown("---")
-    st.subheader("👨‍⚕️ Médecins disponibles")
-    for nom, infos in MEDECINS.items():
-        nb_consultations = len(infos["planning"])
-        specialite = infos["specialite"].upper()
-        st.write(f"**{nom}** ({specialite}) - {nb_consultations} patients")
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.subheader("🔐 Connexion")
+        role = st.selectbox("Rôle", ["Patient", "Médecin", "Administrateur"])
+        username = st.text_input("Nom d'utilisateur")
+        password = st.text_input("Mot de passe", type="password")
+        
+        if st.button("Se connecter", use_container_width=True):
+            if role == "Patient":
+                st.session_state.logged_in = True
+                st.session_state.role = "patient"
+                st.session_state.username = "patient"
+                st.rerun()
+            elif role == "Médecin":
+                if username in ["Dr. Martin", "Dr. Diallo", "Dr. Kone", "Dr. Bamba", "Dr. Touré", "Dr. Kouadio"]:
+                    if hash_password(password) == PASSWORDS.get(f"medecin{list(PASSWORDS.keys()).index(username) if username in PASSWORDS else ''}", ""):
+                        st.session_state.logged_in = True
+                        st.session_state.role = "medecin"
+                        st.session_state.username = username
+                        st.rerun()
+                    else:
+                        st.error("Mot de passe incorrect")
+                else:
+                    st.error("Médecin non reconnu")
+            elif role == "Administrateur":
+                if username == "admin" and hash_password(password) == PASSWORDS["admin"]:
+                    st.session_state.logged_in = True
+                    st.session_state.role = "admin"
+                    st.session_state.username = "admin"
+                    st.rerun()
+                else:
+                    st.error("Identifiants incorrects")
 
 # ============================================
-# SECTION INSCRIPTION PATIENT
+# PAGE PATIENT
 # ============================================
-
-st.header("📝 Inscription à distance")
-
-if not st.session_state.patient_inscrit:
+def page_patient():
+    st.title("🏥 Prise de rendez-vous")
+    st.markdown("---")
+    
     with st.form("inscription_form"):
         col1, col2 = st.columns(2)
         
@@ -344,7 +323,7 @@ if not st.session_state.patient_inscrit:
             height=100
         )
         
-        st.caption("⚠️ Le système analysera automatiquement vos symptômes pour vous orienter vers le bon service.")
+        st.caption("⚠️ Le système analysera automatiquement vos symptômes")
         
         submitted = st.form_submit_button("📤 Envoyer ma demande")
         
@@ -352,152 +331,345 @@ if not st.session_state.patient_inscrit:
             if not nom or not age or not telephone or not symptomes:
                 st.error("Veuillez remplir tous les champs obligatoires (*)")
             else:
-                # Analyse des symptômes
+                # Analyse
                 service, score, priorite, symptomes_detectes = analyser_symptomes(symptomes)
-                
-                # Déterminer si c'est une urgence
                 est_urgent = priorite == "URGENCE"
-                
-                # Vérifier les red flags absolus
-                red_flags = ["douleur thoracique", "perte de connaissance", "paralysie", "avc", "hémorragie"]
-                red_flag_detecte = any(flag in symptomes.lower() for flag in red_flags)
+                red_flag_detecte = any(flag in symptomes.lower() for flag in RED_FLAGS)
                 
                 if red_flag_detecte or est_urgent:
                     st.warning("🚨 **URGENCE DÉTECTÉE !** Rendez-vous immédiatement aux urgences.")
-                    st.info(f"Score: {score} - {priorite}")
                     st.stop()
                 
-                # Trouver un médecin disponible
-                medecin = trouver_medecin_disponible(service, datetime.now(), est_urgent)
+                medecin = trouver_medecin_disponible(service, st.session_state.data, est_urgent)
                 
                 if not medecin:
-                    st.error("Aucun médecin disponible pour ce service. Veuillez réessayer plus tard.")
+                    st.error("Aucun médecin disponible. Veuillez réessayer plus tard.")
                     st.stop()
                 
-                # Attribuer une heure
-                heure_rdv = attribuer_heure(medecin, est_urgent)
+                heure_rdv = attribuer_heure(medecin, st.session_state.data, est_urgent)
                 
                 if not heure_rdv:
                     st.error("Aucun créneau disponible. Veuillez réessayer plus tard.")
                     st.stop()
                 
-                # Enregistrer le patient
-                st.session_state.patient_inscrit = True
-                st.session_state.rdv_attribue = True
-                st.session_state.nb_patients += 1
+                # Enregistrer
+                patient_id = st.session_state.data["prochain_id"]
+                st.session_state.data["prochain_id"] += 1
                 
-                patient_info = {
+                patient = {
+                    "id": patient_id,
                     "nom": nom,
                     "age": age,
                     "sexe": sexe,
                     "telephone": telephone,
                     "email": email,
                     "symptomes": symptomes,
+                    "symptomes_detectes": symptomes_detectes,
                     "service": service,
                     "score": score,
                     "priorite": priorite,
                     "medecin": medecin,
-                    "heure_rdv": heure_rdv,
-                    "symptomes_detectes": symptomes_detectes,
-                    "est_urgent": est_urgent
+                    "heure_rdv": heure_rdv.isoformat(),
+                    "heure_rdv_original": heure_rdv.isoformat(),
+                    "est_urgent": est_urgent,
+                    "retard_ge": False,
+                    "date_inscription": datetime.now().isoformat()
                 }
                 
-                st.session_state.historique.append(patient_info)
-                st.session_state.patient_courant = patient_info
+                st.session_state.data["patients"].append(patient)
+                save_data(st.session_state.data)
                 
-                st.success("✅ Votre demande a été enregistrée avec succès !")
-                st.rerun()
+                st.success("✅ Rendez-vous confirmé !")
+                
+                # Affichage pour le patient (sans score ni priorité)
+                st.markdown("---")
+                st.subheader("📋 Votre rendez-vous")
+                
+                heure_formatee = heure_rdv.strftime("%H:%M")
+                heure_arrivee = (heure_rdv - timedelta(minutes=10)).strftime("%H:%M")
+                
+                st.success(f"""
+                ### 📅 Consultation prévue à **{heure_formatee}**
+                
+                ⚠️ **Arrivez à {heure_arrivee}** (10 minutes avant)
+                
+                📍 **Service:** {service.upper()}
+                👨‍⚕️ **Médecin:** {medecin}
+                """)
+                
+                # Gestion des retards
+                st.markdown("---")
+                st.subheader("⏰ En cas de retard")
+                st.info("""
+                **Règle :**
+                - Retard ≤ 10 min → Consultation maintenue
+                - Retard > 10 min → Nouvelle heure calculée automatiquement
+                """)
+                
+                # Simulateur de retard
+                with st.expander("📱 Simuler un retard"):
+                    retard_minutes = st.slider("Retard (minutes)", 0, 60, 15)
+                    if st.button("Simuler l'arrivée"):
+                        if retard_minutes > 10:
+                            # Recalculer l'heure
+                            nouvelle_heure = gerer_retard(patient, st.session_state.data)
+                            st.warning(f"⚠️ Retard de {retard_minutes} minutes détecté.")
+                            st.success(f"🕐 Nouvelle heure de passage : {nouvelle_heure.strftime('%H:%M')}")
+                            st.info(f"📌 Vous serez reçu après le dernier patient enregistré.")
+                        else:
+                            st.success(f"✅ Retard de {retard_minutes} minutes. Consultation maintenue à l'heure prévue.")
 
 # ============================================
-# AFFICHAGE DU RÉSULTAT
+# PAGE MÉDECIN
 # ============================================
-
-if st.session_state.rdv_attribue and hasattr(st.session_state, 'patient_courant'):
-    patient = st.session_state.patient_courant
+def page_medecin():
+    st.title(f"👨‍⚕️ Espace Médecin - {st.session_state.username}")
+    st.markdown("---")
+    
+    # Récupérer les patients du médecin
+    patients_medecin = [p for p in st.session_state.data["patients"] if p.get("medecin") == st.session_state.username]
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("👥 Patients aujourd'hui", len(patients_medecin))
+    with col2:
+        en_attente = len([p for p in patients_medecin if p.get("retard_ge", False)])
+        st.metric("⏰ En retard", en_attente)
     
     st.markdown("---")
-    st.header("✅ Rendez-vous confirmé")
+    st.subheader("📋 Liste des patients")
     
+    if patients_medecin:
+        # Préparer les données pour affichage
+        df = pd.DataFrame(patients_medecin)
+        df = df.sort_values("heure_rdv")
+        
+        # Affichage avec score et priorité (visibles uniquement par le médecin)
+        df_affichage = df[[
+            "id", "nom", "age", "telephone", "service", 
+            "score", "priorite", "heure_rdv", "symptomes"
+        ]].copy()
+        
+        df_affichage["heure_rdv"] = pd.to_datetime(df_affichage["heure_rdv"]).dt.strftime("%H:%M")
+        df_affichage.columns = ["ID", "Patient", "Âge", "Téléphone", "Service", "Score", "Priorité", "Heure", "Symptômes"]
+        
+        # Colorier selon la priorité
+        def color_priorite(val):
+            if val == "URGENCE":
+                return "background-color: #ff4444; color: white"
+            elif val == "Élevée":
+                return "background-color: #ff8800; color: white"
+            elif val == "Moyenne":
+                return "background-color: #ffcc00"
+            else:
+                return ""
+        
+        st.dataframe(
+            df_affichage.style.applymap(color_priorite, subset=["Priorité"]),
+            use_container_width=True
+        )
+        
+        # Détails d'un patient
+        st.markdown("---")
+        st.subheader("🔍 Détails d'un patient")
+        
+        patient_selectionne = st.selectbox(
+            "Sélectionner un patient",
+            options=[f"{p['id']} - {p['nom']}" for p in patients_medecin]
+        )
+        
+        if patient_selectionne:
+            patient_id = int(patient_selectionne.split(" - ")[0])
+            patient = next(p for p in patients_medecin if p["id"] == patient_id)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Nom:** {patient['nom']}")
+                st.write(f"**Âge:** {patient['age']} ans")
+                st.write(f"**Sexe:** {patient['sexe']}")
+                st.write(f"**Téléphone:** {patient['telephone']}")
+                st.write(f"**Email:** {patient.get('email', 'Non renseigné')}")
+            with col2:
+                st.write(f"**Service:** {patient['service'].upper()}")
+                st.write(f"**Score clinique:** {patient['score']}/12")
+                st.write(f"**Priorité:** {patient['priorite']}")
+                heure = datetime.fromisoformat(patient['heure_rdv']).strftime("%H:%M")
+                st.write(f"**Heure prévue:** {heure}")
+                if patient.get('retard_ge', False):
+                    nouvelle_heure = datetime.fromisoformat(patient['nouvelle_heure']).strftime("%H:%M")
+                    st.warning(f"⚠️ Patient en retard - Nouvelle heure: {nouvelle_heure}")
+            
+            st.write("**Symptômes:**", patient['symptomes'])
+            if patient.get('symptomes_detectes'):
+                st.write("**Symptômes détectés:**", ", ".join(patient['symptomes_detectes']))
+    else:
+        st.info("Aucun patient pour le moment")
+
+# ============================================
+# PAGE ADMINISTRATEUR
+# ============================================
+def page_admin():
+    st.title("🏥 Administration - Tableau de bord")
+    st.markdown("---")
+    
+    data = st.session_state.data
+    
+    # Statistiques générales
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("👥 Total patients", len(data["patients"]))
+    with col2:
+        st.metric("👨‍⚕️ Médecins", len(data["medecins"]))
+    with col3:
+        rdv_aujourdhui = len([p for p in data["patients"] if datetime.fromisoformat(p["heure_rdv"]).date() == datetime.now().date()])
+        st.metric("📅 Rendez-vous aujourd'hui", rdv_aujourdhui)
+    with col4:
+        urgences = len([p for p in data["patients"] if p.get("priorite") == "URGENCE"])
+        st.metric("🚨 Urgences détectées", urgences)
+    
+    st.markdown("---")
+    
+    # Graphiques et stats
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("👤 Informations patient")
-        st.write(f"**Nom:** {patient['nom']}")
-        st.write(f"**Âge:** {patient['age']} ans")
-        st.write(f"**Sexe:** {patient['sexe']}")
-        st.write(f"**Téléphone:** {patient['telephone']}")
+        st.subheader("📊 Répartition par service")
+        services = [p.get("service", "Non défini") for p in data["patients"]]
+        if services:
+            df_services = pd.DataFrame(services, columns=["Service"])
+            st.bar_chart(df_services["Service"].value_counts())
+        else:
+            st.info("Aucune donnée disponible")
     
     with col2:
-        st.subheader("📋 Résultats de l'analyse")
-        st.write(f"**Service:** {patient['service'].upper()}")
-        st.write(f"**Score clinique:** {patient['score']}")
-        st.write(f"**Priorité:** {patient['priorite']}")
-        st.write(f"**Médecin:** {patient['medecin']}")
+        st.subheader("📊 Répartition des priorités")
+        priorites = [p.get("priorite", "Non défini") for p in data["patients"]]
+        if priorites:
+            df_priorites = pd.DataFrame(priorites, columns=["Priorité"])
+            st.bar_chart(df_priorites["Priorité"].value_counts())
+        else:
+            st.info("Aucune donnée disponible")
     
     st.markdown("---")
     
-    # Heure de rendez-vous
-    st.subheader("🕐 Votre rendez-vous")
-    heure_formatee = patient['heure_rdv'].strftime("%H:%M")
-    heure_arrivee = (patient['heure_rdv'] - timedelta(minutes=10)).strftime("%H:%M")
+    # Liste de tous les patients
+    st.subheader("📋 Tous les patients")
     
-    st.success(f"""
-    ### 📅 Votre consultation est prévue à **{heure_formatee}**
-    
-    ⚠️ **Arrivez à {heure_arrivee}** (10 minutes avant)
-    
-    📍 **Service:** {patient['service'].upper()}
-    👨‍⚕️ **Médecin:** {patient['medecin']}
-    """)
-    
-    # Symptômes détectés
-    if patient['symptomes_detectes']:
-        with st.expander("🔍 Symptômes détectés"):
-            for symptome in patient['symptomes_detectes']:
-                points = SYMPTOME_POINTS.get(symptome, 0)
-                st.write(f"- {symptome} ({points} points)")
-    
-    # Gestion des retards
-    st.markdown("---")
-    st.subheader("⏰ Gestion des retards")
-    
-    st.info("""
-    **Règle applicable :**
-    - 🔵 Retard ≤ 10 min → Consultation maintenue
-    - 🔴 Retard > 10 min → Rendez-vous annulé et patient replacé en fin de file
-    """)
-    
-    # Simulateur de retard pour démonstration
-    with st.expander("📱 Simuler un retard (démonstration)"):
-        retard_minutes = st.slider("Retard simulé (minutes)", 0, 60, 15)
-        if st.button("Simuler l'arrivée"):
-            heure_arrivee_simulee = patient['heure_rdv'] + timedelta(minutes=retard_minutes)
-            resultat = gerer_retard(patient['heure_rdv'], heure_arrivee_simulee)
-            
-            if "annulé" in resultat:
-                st.error(f"❌ {resultat}")
+    if data["patients"]:
+        df = pd.DataFrame(data["patients"])
+        df = df.sort_values("date_inscription", ascending=False)
+        
+        df_affichage = df[[
+            "id", "nom", "age", "telephone", "service", 
+            "score", "priorite", "medecin", "heure_rdv"
+        ]].copy()
+        
+        df_affichage["heure_rdv"] = pd.to_datetime(df_affichage["heure_rdv"]).dt.strftime("%H:%M")
+        df_affichage.columns = ["ID", "Patient", "Âge", "Téléphone", "Service", "Score", "Priorité", "Médecin", "Heure"]
+        
+        # Colorier selon la priorité
+        def color_priorite(val):
+            if val == "URGENCE":
+                return "background-color: #ff4444; color: white"
+            elif val == "Élevée":
+                return "background-color: #ff8800; color: white"
+            elif val == "Moyenne":
+                return "background-color: #ffcc00"
             else:
-                st.success(f"✅ {resultat}")
-
-# ============================================
-# SECTION HISTORIQUE
-# ============================================
-
-if st.session_state.historique:
+                return ""
+        
+        st.dataframe(
+            df_affichage.style.applymap(color_priorite, subset=["Priorité"]),
+            use_container_width=True
+        )
+    else:
+        st.info("Aucun patient enregistré")
+    
     st.markdown("---")
-    st.header("📊 Historique des consultations")
     
-    # Convertir en DataFrame pour affichage
-    df = pd.DataFrame(st.session_state.historique)
-    df_affichage = df[["nom", "service", "score", "priorite", "medecin", "heure_rdv"]].copy()
-    df_affichage["heure_rdv"] = df_affichage["heure_rdv"].dt.strftime("%H:%M")
-    df_affichage.columns = ["Patient", "Service", "Score", "Priorité", "Médecin", "Heure"]
+    # Gestion des médecins
+    st.subheader("👨‍⚕️ Gestion des médecins")
+    col1, col2 = st.columns(2)
     
-    st.dataframe(df_affichage, use_container_width=True)
+    with col1:
+        st.write("**Médecins disponibles:**")
+        for nom, infos in data["medecins"].items():
+            nb_patients = len([p for p in data["patients"] if p.get("medecin") == nom])
+            st.write(f"- {nom} ({infos['specialite']}) - {nb_patients} patients")
+    
+    with col2:
+        st.write("**Charges par médecin:**")
+        charges = {}
+        for nom in data["medecins"].keys():
+            charges[nom] = len([p for p in data["patients"] if p.get("medecin") == nom])
+        
+        if charges:
+            df_charges = pd.DataFrame(list(charges.items()), columns=["Médecin", "Patients"])
+            st.bar_chart(df_charges.set_index("Médecin"))
+    
+    st.markdown("---")
+    
+    # Export des données
+    if st.button("📥 Exporter les données (CSV)"):
+        if data["patients"]:
+            df_export = pd.DataFrame(data["patients"])
+            csv = df_export.to_csv(index=False)
+            st.download_button(
+                label="Télécharger CSV",
+                data=csv,
+                file_name=f"export_hopital_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    
+    # Réinitialiser les données
+    with st.expander("⚠️ Administration avancée"):
+        if st.button("🗑️ Réinitialiser toutes les données", type="secondary"):
+            if st.checkbox("Confirmer la réinitialisation"):
+                st.session_state.data = {
+                    "patients": [],
+                    "consultations": [],
+                    "medecins": data["medecins"],
+                    "planning": {},
+                    "prochain_id": 1
+                }
+                save_data(st.session_state.data)
+                st.success("Données réinitialisées avec succès")
+                st.rerun()
 
 # ============================================
-# PIED DE PAGE
+# PAGE DE DÉCONNEXION
 # ============================================
+def logout():
+    for key in ['logged_in', 'role', 'username']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
 
-st.markdown("---")
-st.caption("🏥 Système Intelligent de Gestion Hospitalière - Projet étudiant")
+# ============================================
+# ROUTAGE PRINCIPAL
+# ============================================
+if not st.session_state.logged_in:
+    login_page()
+else:
+    # Barre de navigation
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        if st.session_state.role == "patient":
+            st.write(f"👤 Patient")
+        elif st.session_state.role == "medecin":
+            st.write(f"👨‍⚕️ {st.session_state.username}")
+        else:
+            st.write(f"👑 Administrateur")
+    with col3:
+        if st.button("🚪 Déconnexion"):
+            logout()
+    
+    st.markdown("---")
+    
+    # Afficher la page selon le rôle
+    if st.session_state.role == "patient":
+        page_patient()
+    elif st.session_state.role == "medecin":
+        page_medecin()
+    elif st.session_state.role == "admin":
+        page_admin()
