@@ -17,129 +17,115 @@ st.set_page_config(
 # ==================== DATABASE ====================
 class Database:
     def init_tables(self):
-    conn = self.get_connection()
-    cursor = conn.cursor()
-    
-    # Création des tables
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS patients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT NOT NULL,
-            prenom TEXT NOT NULL,
-            age INTEGER NOT NULL,
-            sexe TEXT NOT NULL,
-            telephone TEXT NOT NULL,
-            email TEXT,
-            date_inscription TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS medecins (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT NOT NULL,
-            prenom TEXT NOT NULL,
-            specialite TEXT NOT NULL,
-            email TEXT UNIQUE NOT NULL,
-            mot_de_passe TEXT NOT NULL,
-            duree_consultation INTEGER DEFAULT 15
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS services (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT UNIQUE NOT NULL,
-            description TEXT
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS rendez_vous (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            patient_id INTEGER NOT NULL,
-            medecin_generaliste_id INTEGER,
-            medecin_specialiste_id INTEGER,
-            service_id INTEGER,
-            date_rdv TEXT NOT NULL,
-            heure_rdv TEXT NOT NULL,
-            statut TEXT DEFAULT 'en_attente',
-            priorite INTEGER DEFAULT 0,
-            score_priorite INTEGER DEFAULT 0,
-            symptomes TEXT,
-            diagnostic TEXT,
-            observation TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            annule_automatique INTEGER DEFAULT 0,
-            heure_annulation TEXT,
-            FOREIGN KEY (patient_id) REFERENCES patients(id),
-            FOREIGN KEY (medecin_generaliste_id) REFERENCES medecins(id),
-            FOREIGN KEY (medecin_specialiste_id) REFERENCES medecins(id),
-            FOREIGN KEY (service_id) REFERENCES services(id)
-        )
-    ''')
-    
-    # ✅ MIGRATION : Ajouter les colonnes si elles n'existent pas
-    cursor.execute("PRAGMA table_info(rendez_vous)")
-    columns = [col[1] for col in cursor.fetchall()]
-    
-    if 'annule_automatique' not in columns:
-        cursor.execute("ALTER TABLE rendez_vous ADD COLUMN annule_automatique INTEGER DEFAULT 0")
-        print("✅ Colonne 'annule_automatique' ajoutée")
-    
-    if 'heure_annulation' not in columns:
-        cursor.execute("ALTER TABLE rendez_vous ADD COLUMN heure_annulation TEXT")
-        print("✅ Colonne 'heure_annulation' ajoutée")
-    
-    # Données par défaut
-    cursor.execute("SELECT COUNT(*) FROM medecins")
-    if cursor.fetchone()[0] == 0:
-        medecins = [
-            ("Koffi", "Jean", "Généraliste", "dr.koffi@hopital.com", "admin123", 15),
-            ("Amadou", "Moussa", "Cardiologue", "dr.amadou@hopital.com", "admin123", 20),
-            ("Ade", "Yvette", "Gynécologue", "dr.ade@hopital.com", "admin123", 20),
-            ("Komi", "Pierre", "Pédiatre", "dr.komi@hopital.com", "admin123", 15),
-            ("Admin", "System", "Administrateur", "admin@hopital.com", "admin123", 15)
-        ]
-        cursor.executemany('''
-            INSERT INTO medecins (nom, prenom, specialite, email, mot_de_passe, duree_consultation)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', medecins)
-    
-    cursor.execute("SELECT COUNT(*) FROM services")
-    if cursor.fetchone()[0] == 0:
-        services = [
-            ("Cardiologie", "Maladies du coeur"),
-            ("Pneumologie", "Maladies respiratoires"),
-            ("Neurologie", "Système nerveux"),
-            ("Dermatologie", "Maladies de la peau"),
-            ("Ophtalmologie", "Maladies des yeux"),
-            ("Gynécologie", "Santé de la femme"),
-            ("Pédiatrie", "Enfants"),
-            ("Orthopédie", "Système musculo-squelettique")
-        ]
-        cursor.executemany(
-            "INSERT INTO services (nom, description) VALUES (?, ?)",
-            services
-        )
-    
-    conn.commit()
-    conn.close()
-        
-       
-    
-    
-    def ajouter_patient(self, nom, prenom, age, sexe, telephone, email=None):
         conn = self.get_connection()
         cursor = conn.cursor()
+        
+        # Création des tables
         cursor.execute('''
-            INSERT INTO patients (nom, prenom, age, sexe, telephone, email)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (nom, prenom, age, sexe, telephone, email))
-        patient_id = cursor.lastrowid
+            CREATE TABLE IF NOT EXISTS patients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                prenom TEXT NOT NULL,
+                age INTEGER NOT NULL,
+                sexe TEXT NOT NULL,
+                telephone TEXT NOT NULL,
+                email TEXT,
+                date_inscription TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS medecins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                prenom TEXT NOT NULL,
+                specialite TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                mot_de_passe TEXT NOT NULL,
+                duree_consultation INTEGER DEFAULT 15
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS services (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT UNIQUE NOT NULL,
+                description TEXT
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS rendez_vous (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                medecin_generaliste_id INTEGER,
+                medecin_specialiste_id INTEGER,
+                service_id INTEGER,
+                date_rdv TEXT NOT NULL,
+                heure_rdv TEXT NOT NULL,
+                statut TEXT DEFAULT 'en_attente',
+                priorite INTEGER DEFAULT 0,
+                score_priorite INTEGER DEFAULT 0,
+                symptomes TEXT,
+                diagnostic TEXT,
+                observation TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                annule_automatique INTEGER DEFAULT 0,
+                heure_annulation TEXT,
+                FOREIGN KEY (patient_id) REFERENCES patients(id),
+                FOREIGN KEY (medecin_generaliste_id) REFERENCES medecins(id),
+                FOREIGN KEY (medecin_specialiste_id) REFERENCES medecins(id),
+                FOREIGN KEY (service_id) REFERENCES services(id)
+            )
+        ''')
+        
+        # MIGRATION : Ajouter les colonnes si elles n'existent pas
+        cursor.execute("PRAGMA table_info(rendez_vous)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        if 'annule_automatique' not in columns:
+            cursor.execute("ALTER TABLE rendez_vous ADD COLUMN annule_automatique INTEGER DEFAULT 0")
+            print("✅ Colonne 'annule_automatique' ajoutée")
+        
+        if 'heure_annulation' not in columns:
+            cursor.execute("ALTER TABLE rendez_vous ADD COLUMN heure_annulation TEXT")
+            print("✅ Colonne 'heure_annulation' ajoutée")
+        
+        # Données par défaut - Médecins
+        cursor.execute("SELECT COUNT(*) FROM medecins")
+        if cursor.fetchone()[0] == 0:
+            medecins = [
+                ("Koffi", "Jean", "Généraliste", "dr.koffi@hopital.com", "admin123", 15),
+                ("Amadou", "Moussa", "Cardiologue", "dr.amadou@hopital.com", "admin123", 20),
+                ("Ade", "Yvette", "Gynécologue", "dr.ade@hopital.com", "admin123", 20),
+                ("Komi", "Pierre", "Pédiatre", "dr.komi@hopital.com", "admin123", 15),
+                ("Admin", "System", "Administrateur", "admin@hopital.com", "admin123", 15)
+            ]
+            cursor.executemany('''
+                INSERT INTO medecins (nom, prenom, specialite, email, mot_de_passe, duree_consultation)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', medecins)
+        
+        # Données par défaut - Services
+        cursor.execute("SELECT COUNT(*) FROM services")
+        if cursor.fetchone()[0] == 0:
+            services = [
+                ("Cardiologie", "Maladies du coeur"),
+                ("Pneumologie", "Maladies respiratoires"),
+                ("Neurologie", "Système nerveux"),
+                ("Dermatologie", "Maladies de la peau"),
+                ("Ophtalmologie", "Maladies des yeux"),
+                ("Gynécologie", "Santé de la femme"),
+                ("Pédiatrie", "Enfants"),
+                ("Orthopédie", "Système musculo-squelettique")
+            ]
+            cursor.executemany(
+                "INSERT INTO services (nom, description) VALUES (?, ?)",
+                services
+            )
+        
         conn.commit()
         conn.close()
-        return patient_id
     
     def get_patient_by_nom_prenom(self, nom, prenom):
         conn = self.get_connection()
