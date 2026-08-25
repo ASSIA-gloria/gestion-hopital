@@ -15,8 +15,8 @@ st.set_page_config(
 )
 
 # ==================== CONSTANTES ====================
-HEURE_OUVERTURE = 7  # 7h00
-HEURE_FERMETURE = 20  # 20h00
+HEURE_OUVERTURE = 7
+HEURE_FERMETURE = 20
 FUSEAU_HORAIRE = "GMT+0"
 
 
@@ -26,14 +26,14 @@ class Database:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db_path = db_path
         self.init_tables()
-    
+
     def get_connection(self):
         return sqlite3.connect(self.db_path)
-    
+
     def init_tables(self):
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS patients (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +46,7 @@ class Database:
                 date_inscription TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS medecins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +58,7 @@ class Database:
                 duree_consultation INTEGER DEFAULT 15
             )
         ''')
-        
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS services (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,7 +66,7 @@ class Database:
                 description TEXT
             )
         ''')
-        
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS rendez_vous (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,22 +93,22 @@ class Database:
                 FOREIGN KEY (service_id) REFERENCES services(id)
             )
         ''')
-        
+
         cursor.execute("PRAGMA table_info(rendez_vous)")
         columns = [col[1] for col in cursor.fetchall()]
-        
+
         if 'annule_automatique' not in columns:
             cursor.execute("ALTER TABLE rendez_vous ADD COLUMN annule_automatique INTEGER DEFAULT 0")
-        
+
         if 'heure_annulation' not in columns:
             cursor.execute("ALTER TABLE rendez_vous ADD COLUMN heure_annulation TEXT")
-        
+
         if 'decale_urgence' not in columns:
             cursor.execute("ALTER TABLE rendez_vous ADD COLUMN decale_urgence INTEGER DEFAULT 0")
-        
+
         if 'ancienne_heure' not in columns:
             cursor.execute("ALTER TABLE rendez_vous ADD COLUMN ancienne_heure TEXT")
-        
+
         cursor.execute("SELECT COUNT(*) FROM medecins")
         if cursor.fetchone()[0] == 0:
             medecins = [
@@ -122,7 +122,7 @@ class Database:
                 INSERT INTO medecins (nom, prenom, specialite, email, mot_de_passe, duree_consultation)
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', medecins)
-        
+
         cursor.execute("SELECT COUNT(*) FROM services")
         if cursor.fetchone()[0] == 0:
             services = [
@@ -139,10 +139,10 @@ class Database:
                 "INSERT INTO services (nom, description) VALUES (?, ?)",
                 services
             )
-        
+
         conn.commit()
         conn.close()
-    
+
     def ajouter_patient(self, nom, prenom, age, sexe, telephone, email=None):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -154,7 +154,7 @@ class Database:
         conn.commit()
         conn.close()
         return patient_id
-    
+
     def get_patient_by_nom_prenom(self, nom, prenom):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -163,7 +163,7 @@ class Database:
         patients = cursor.fetchall()
         conn.close()
         return patients
-    
+
     def get_patient_by_id(self, patient_id):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -171,7 +171,7 @@ class Database:
         patient = cursor.fetchone()
         conn.close()
         return patient
-    
+
     def get_medecin_by_email(self, email):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -179,7 +179,7 @@ class Database:
         medecin = cursor.fetchone()
         conn.close()
         return medecin
-    
+
     def get_medecin_by_id(self, medecin_id):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -187,7 +187,7 @@ class Database:
         medecin = cursor.fetchone()
         conn.close()
         return medecin
-    
+
     def get_medecins_by_specialite(self, specialite):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -195,7 +195,7 @@ class Database:
         medecins = cursor.fetchall()
         conn.close()
         return medecins
-    
+
     def get_all_medecins(self):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -203,7 +203,7 @@ class Database:
         medecins = cursor.fetchall()
         conn.close()
         return medecins
-    
+
     def get_services(self):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -211,7 +211,7 @@ class Database:
         services = cursor.fetchall()
         conn.close()
         return services
-    
+
     def ajouter_rendez_vous(self, patient_id, service_id, date_rdv, heure_rdv, 
                            symptomes=None, medecin_generaliste_id=None, 
                            medecin_specialiste_id=None, priorite=0, score_priorite=0):
@@ -228,7 +228,7 @@ class Database:
         conn.commit()
         conn.close()
         return rdv_id
-    
+
     def get_rendez_vous_by_patient(self, patient_id):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -244,9 +244,8 @@ class Database:
         rdvs = cursor.fetchall()
         conn.close()
         return rdvs
-    
+
     def get_rendez_vous_by_medecin(self, medecin_id, date=None):
-        """Récupère les rendez-vous d'un médecin (uniquement ceux qui le concernent)"""
         conn = self.get_connection()
         cursor = conn.cursor()
         if date:
@@ -277,38 +276,37 @@ class Database:
         rdvs = cursor.fetchall()
         conn.close()
         return rdvs
-    
-def get_rendez_vous_en_attente(self, medecin_id=None):
-    """Récupère les rendez-vous en attente (filtrés par médecin si fourni)"""
-    conn = self.get_connection()
-    cursor = conn.cursor()
-    if medecin_id:
-        cursor.execute('''
-            SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
-                   s.nom as service_nom
-            FROM rendez_vous r
-            JOIN patients p ON r.patient_id = p.id
-            LEFT JOIN services s ON r.service_id = s.id
-            WHERE r.statut = 'en_attente'
-            AND r.annule_automatique = 0
-            AND (r.medecin_generaliste_id = ? OR r.medecin_specialiste_id = ?)
-            ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
-        ''', (medecin_id, medecin_id))
-    else:
-        cursor.execute('''
-            SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
-                   s.nom as service_nom
-            FROM rendez_vous r
-            JOIN patients p ON r.patient_id = p.id
-            LEFT JOIN services s ON r.service_id = s.id
-            WHERE r.statut = 'en_attente'
-            AND r.annule_automatique = 0
-            ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
-        ''')
-    rdvs = cursor.fetchall()
-    conn.close()
-    return rdvs
-    
+
+    def get_rendez_vous_en_attente(self, medecin_id=None):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        if medecin_id:
+            cursor.execute('''
+                SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
+                       s.nom as service_nom
+                FROM rendez_vous r
+                JOIN patients p ON r.patient_id = p.id
+                LEFT JOIN services s ON r.service_id = s.id
+                WHERE r.statut = 'en_attente'
+                AND r.annule_automatique = 0
+                AND (r.medecin_generaliste_id = ? OR r.medecin_specialiste_id = ?)
+                ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
+            ''', (medecin_id, medecin_id))
+        else:
+            cursor.execute('''
+                SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
+                       s.nom as service_nom
+                FROM rendez_vous r
+                JOIN patients p ON r.patient_id = p.id
+                LEFT JOIN services s ON r.service_id = s.id
+                WHERE r.statut = 'en_attente'
+                AND r.annule_automatique = 0
+                ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
+            ''')
+        rdvs = cursor.fetchall()
+        conn.close()
+        return rdvs
+
     def get_all_rendez_vous(self):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -323,68 +321,15 @@ def get_rendez_vous_en_attente(self, medecin_id=None):
         rdvs = cursor.fetchall()
         conn.close()
         return rdvs
-class Database:
-    def __init__(self, db_path="data/hopital.db"):
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self.db_path = db_path
-        self.init_tables()
-    
-    def get_connection(self):
-        return sqlite3.connect(self.db_path)
-    
-    def init_tables(self):
-        # ... code existant ...
-    
-    def ajouter_patient(self, nom, prenom, age, sexe, telephone, email=None):
-        # ... code existant ...
-    
-    def get_patient_by_nom_prenom(self, nom, prenom):
-        # ... code existant ...
-    
-    def get_patient_by_id(self, patient_id):
-        # ... code existant ...
-    
-    def get_medecin_by_email(self, email):
-        # ... code existant ...
-    
-    def get_medecin_by_id(self, medecin_id):
-        # ... code existant ...
-    
-    def get_medecins_by_specialite(self, specialite):
-        # ... code existant ...
-    
-    def get_all_medecins(self):
-        # ... code existant ...
-    
-    def get_services(self):
-        # ... code existant ...
-    
-    def ajouter_rendez_vous(self, patient_id, service_id, date_rdv, heure_rdv, 
-                           symptomes=None, medecin_generaliste_id=None, 
-                           medecin_specialiste_id=None, priorite=0, score_priorite=0):
-        # ... code existant ...
-    
-    def get_rendez_vous_by_patient(self, patient_id):
-        # ... code existant ...
-    
-    def get_rendez_vous_by_medecin(self, medecin_id, date=None):
-        # ... code existant ...
-    
-    def get_rendez_vous_en_attente(self, medecin_id=None):
-        # ... code existant ...
-    
-    def get_all_rendez_vous(self):
-        # ... code existant ...
-    
-    def verifier_et_annuler_rdv_passes(self):   # ← AJOUTER ICI
-        """Vérifie et annule automatiquement les rendez-vous dont l'heure est dépassée"""
+
+    def verifier_et_annuler_rdv_passes(self):
         maintenant = datetime.utcnow()
         date_actuelle = maintenant.strftime("%Y-%m-%d")
         heure_actuelle = maintenant.strftime("%H:%M")
-        
+
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             SELECT r.*, p.nom, p.prenom, p.telephone
             FROM rendez_vous r
@@ -396,17 +341,17 @@ class Database:
                 OR (r.date_rdv = ? AND r.heure_rdv < ?)
             )
         ''', (date_actuelle, date_actuelle, heure_actuelle))
-        
+
         rdvs_expires = cursor.fetchall()
         messages = []
-        
+
         for rdv in rdvs_expires:
             cursor.execute('''
                 UPDATE rendez_vous 
                 SET statut = 'annule', annule_automatique = 1, heure_annulation = ?
                 WHERE id = ?
             ''', (heure_actuelle, rdv[0]))
-            
+
             patient_nom = rdv[-3] if len(rdv) > 16 else "Patient"
             patient_prenom = rdv[-2] if len(rdv) > 16 else ""
             messages.append({
@@ -416,22 +361,11 @@ class Database:
                 'heure': rdv[6],
                 'rdv_id': rdv[0]
             })
-        
+
         conn.commit()
         conn.close()
         return messages
-    
-    def update_rendez_vous(self, rdv_id, **kwargs):
-        # ... code existant ...
-    
-    def get_heure_gmt0(self):
-        # ... code existant ...
-    
-    def calculer_prochain_creneau(self, medecin_id, date_rdv, duree_consultation=15):
-        # ... code existant ...
-    
-    def gerer_urgence_et_decaler(self, service_id, date_rdv, heure_rdv, priorite):
-        # ... code existant ...
+
     def update_rendez_vous(self, rdv_id, **kwargs):
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -445,14 +379,14 @@ class Database:
         cursor.execute(query, values)
         conn.commit()
         conn.close()
-    
+
     def get_heure_gmt0(self):
         return datetime.utcnow()
-    
+
     def calculer_prochain_creneau(self, medecin_id, date_rdv, duree_consultation=15):
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             SELECT heure_rdv, priorite FROM rendez_vous 
             WHERE (medecin_generaliste_id = ? OR medecin_specialiste_id = ?)
@@ -463,27 +397,27 @@ class Database:
         ''', (medecin_id, medecin_id, date_rdv))
         rdvs = cursor.fetchall()
         conn.close()
-        
+
         date_obj = datetime.strptime(date_rdv, "%Y-%m-%d")
-        
+
         maintenant = datetime.utcnow()
         if date_obj.date() == maintenant.date() and maintenant.hour >= HEURE_FERMETURE:
             date_obj = date_obj + timedelta(days=1)
             date_rdv = date_obj.strftime("%Y-%m-%d")
             rdvs = []
-        
+
         if not rdvs:
             return date_rdv, f"{HEURE_OUVERTURE:02d}:00"
-        
+
         heures_prises = []
         for rdv in rdvs:
             h, m = map(int, rdv[0].split(':'))
             heures_prises.append(h * 60 + m)
-        
+
         debut_journee = HEURE_OUVERTURE * 60
         fin_journee = HEURE_FERMETURE * 60
         heures_prises.sort()
-        
+
         for i in range(debut_journee, fin_journee - duree_consultation + 1, duree_consultation):
             disponible = True
             for h in heures_prises:
@@ -493,14 +427,14 @@ class Database:
             if disponible:
                 heure = f"{i // 60:02d}:{i % 60:02d}"
                 return date_rdv, heure
-        
+
         date_obj = datetime.strptime(date_rdv, "%Y-%m-%d") + timedelta(days=1)
         return date_obj.strftime("%Y-%m-%d"), f"{HEURE_OUVERTURE:02d}:00"
-    
+
     def gerer_urgence_et_decaler(self, service_id, date_rdv, heure_rdv, priorite):
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         if priorite >= 2:
             cursor.execute('''
                 SELECT id, heure_rdv, patient_id FROM rendez_vous 
@@ -511,15 +445,15 @@ class Database:
                 AND annule_automatique = 0
                 ORDER BY priorite DESC, heure_rdv
             ''', (service_id, date_rdv))
-            
+
             rdvs_a_decaler = cursor.fetchall()
-            
+
             messages_decalage = []
             for rdv in rdvs_a_decaler:
                 ancienne_heure = rdv[1]
                 ancien_dt = datetime.strptime(ancienne_heure, "%H:%M")
                 nouvelle_heure = (ancien_dt + timedelta(minutes=15)).strftime("%H:%M")
-                
+
                 nouvelle_heure_dt = datetime.strptime(nouvelle_heure, "%H:%M")
                 if nouvelle_heure_dt.hour >= HEURE_FERMETURE:
                     date_obj = datetime.strptime(date_rdv, "%Y-%m-%d") + timedelta(days=1)
@@ -538,7 +472,7 @@ class Database:
                             decale_urgence = 1, ancienne_heure = ?
                         WHERE id = ?
                     ''', (nouvelle_heure, ancienne_heure, rdv[0]))
-                
+
                 messages_decalage.append({
                     'rdv_id': rdv[0],
                     'patient_id': rdv[2],
@@ -546,57 +480,13 @@ class Database:
                     'nouvelle_heure': nouvelle_heure,
                     'date': date_rdv
                 })
-            
+
             conn.commit()
             conn.close()
             return messages_decalage
-        
+
         conn.close()
         return []
-    
-    def verifier_et_annuler_rdv_passes(self):
-        maintenant = datetime.utcnow()
-        date_actuelle = maintenant.strftime("%Y-%m-%d")
-        heure_actuelle = maintenant.strftime("%H:%M")
-        
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT r.*, p.nom, p.prenom, p.telephone
-            FROM rendez_vous r
-            JOIN patients p ON r.patient_id = p.id
-            WHERE r.statut IN ('en_attente', 'confirme')
-            AND r.annule_automatique = 0
-            AND (
-                r.date_rdv < ? 
-                OR (r.date_rdv = ? AND r.heure_rdv < ?)
-            )
-        ''', (date_actuelle, date_actuelle, heure_actuelle))
-        
-        rdvs_expires = cursor.fetchall()
-        messages = []
-        
-        for rdv in rdvs_expires:
-            cursor.execute('''
-                UPDATE rendez_vous 
-                SET statut = 'annule', annule_automatique = 1, heure_annulation = ?
-                WHERE id = ?
-            ''', (heure_actuelle, rdv[0]))
-            
-            patient_nom = rdv[-3] if len(rdv) > 16 else "Patient"
-            patient_prenom = rdv[-2] if len(rdv) > 16 else ""
-            messages.append({
-                'patient': f"{patient_prenom} {patient_nom}",
-                'telephone': rdv[-1] if len(rdv) > 16 else "Non renseigné",
-                'date': rdv[5],
-                'heure': rdv[6],
-                'rdv_id': rdv[0]
-            })
-        
-        conn.commit()
-        conn.close()
-        return messages
 
 
 # ==================== UTILS ====================
@@ -608,12 +498,12 @@ class TriageMedecin:
         'nausees': 1, 'vomissements': 2, 'hemorragie': 8, 'infection': 2,
         'malaise': 4, 'douleur_abdominale': 3, 'cephalée': 2
     }
-    
+
     @classmethod
     def calculer_score(cls, symptomes_liste):
         score = 0
         symptomes_match = []
-        
+
         for symptome in symptomes_liste:
             symptome_clean = symptome.lower().strip().replace(' ', '_')
             for key, value in cls.POINTS_SYMPTOMES.items():
@@ -621,7 +511,7 @@ class TriageMedecin:
                     score += value
                     symptomes_match.append(key)
                     break
-        
+
         if score >= 12:
             priorite = 3
             niveau = "URGENCE"
@@ -634,16 +524,16 @@ class TriageMedecin:
         else:
             priorite = 0
             niveau = "FAIBLE"
-        
+
         return score, priorite, niveau, symptomes_match
-    
+
     @classmethod
     def orienter_patient(cls, score):
         if score >= 12:
             return "URGENCE", "⚠️ Vos symptômes nécessitent une prise en charge immédiate. Rendez-vous aux urgences."
         else:
             return "CONSULTATION", "✅ Prenez rendez-vous avec un médecin généraliste."
-    
+
     @classmethod
     def suggerer_service(cls, symptomes_liste):
         suggestions = {
@@ -656,7 +546,7 @@ class TriageMedecin:
             'Ophtalmologie': ['vision', 'œil', 'yeux', 'vue'],
             'Pédiatrie': ['enfant', 'bébé', 'nourrisson']
         }
-        
+
         for service, mots_cles in suggestions.items():
             for symptome in symptomes_liste:
                 symptome_clean = symptome.lower().strip().replace(' ', '_')
@@ -690,20 +580,19 @@ def page_accueil():
     """Page d'accueil - Le patient ne voit PAS les statistiques"""
     st.title("🏥 Système de Gestion des Files d'Attente")
     st.subheader("Bienvenue dans l'application de gestion hospitalière")
-    
+
     st.caption(f"🕐 Tous les horaires sont en {FUSEAU_HORAIRE}")
     st.caption(f"🏥 Horaires d'ouverture : {HEURE_OUVERTURE}h00 - {HEURE_FERMETURE}h00")
-    
-    # Vérifier les rendez-vous expirés (visible par tous)
+
     messages = st.session_state.db.verifier_et_annuler_rdv_passes()
     if messages:
         for msg in messages:
             st.warning(f"⏰ Rendez-vous de {msg['patient']} du {msg['date']} à {msg['heure']} annulé automatiquement.")
-    
+
     st.markdown("---")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         st.markdown("""
         ### 👤 Patient
@@ -712,15 +601,15 @@ def page_accueil():
         - Consulter ses rendez-vous
         
         """)
-        
+
         if st.button("📋 Prendre rendez-vous", use_container_width=True):
             st.session_state.page = "Patient"
             st.rerun()
-        
+
         if st.button("📅 Voir mes rendez-vous", use_container_width=True):
             st.session_state.page = "Mes rendez-vous"
             st.rerun()
-    
+
     with col2:
         st.markdown("""
         ### 👨‍⚕️ Médecin / Administration
@@ -730,24 +619,21 @@ def page_accueil():
         - Gérer les rendez-vous
         
         """)
-        
+
         if st.button("🔐 Se connecter", use_container_width=True):
             st.session_state.page = "Connexion"
             st.rerun()
-    
-    # ✅ SUPPRESSION DES STATISTIQUES POUR LE PATIENT
-    # Les statistiques ne sont plus affichées sur la page d'accueil
 
 
 def page_connexion():
     st.title("🔐 Connexion")
     st.info("💡 Connectez-vous avec vos identifiants médicaux.")
-    
+
     with st.form("connexion_form"):
         email = st.text_input("📧 Email", placeholder="dr.koffi@hopital.com")
         password = st.text_input("🔑 Mot de passe", type="password", placeholder="admin123")
         submitted = st.form_submit_button("Se connecter")
-        
+
         if submitted:
             if not email or not password:
                 st.error("Veuillez remplir tous les champs.")
@@ -766,7 +652,7 @@ def page_connexion():
                     st.rerun()
                 else:
                     st.error("❌ Email ou mot de passe incorrect.")
-    
+
     if st.button("← Retour à l'accueil"):
         st.session_state.page = "Accueil"
         st.rerun()
@@ -776,10 +662,10 @@ def page_patient():
     """Page patient pour prendre un rendez-vous"""
     st.title("📋 Prendre un rendez-vous")
     st.caption(f"🕐 Fuseau horaire : {FUSEAU_HORAIRE} | Horaires : {HEURE_OUVERTURE}h - {HEURE_FERMETURE}h")
-    
+
     with st.form("analyse_form"):
         st.subheader("📝 Vos informations")
-        
+
         col1, col2 = st.columns(2)
         with col1:
             nom = st.text_input("Nom *", placeholder="Votre nom")
@@ -789,23 +675,23 @@ def page_patient():
             sexe = st.selectbox("Sexe *", ["", "M", "F"])
             telephone = st.text_input("Téléphone *", placeholder="Ex: 90909090")
             email = st.text_input("Email", placeholder="exemple@email.com")
-        
+
         st.subheader("🩺 Vos symptômes")
         symptomes = st.text_area(
             "Décrivez vos symptômes (séparez par des virgules)",
             placeholder="Ex: fièvre, toux, douleur thoracique, difficulté respiratoire",
             height=100
         )
-        
+
         analyser = st.form_submit_button("🔍 Analyser mes symptômes")
-    
+
     if analyser and symptomes:
         symptomes_list = [s.strip() for s in symptomes.split(',') if s.strip()]
         if symptomes_list:
             score, priorite, niveau, _ = TriageMedecin.calculer_score(symptomes_list)
             orientation, message = TriageMedecin.orienter_patient(score)
             service_suggere = TriageMedecin.suggerer_service(symptomes_list)
-            
+
             st.session_state.analyse_result = {
                 'score': score,
                 'priorite': priorite,
@@ -822,33 +708,33 @@ def page_patient():
                 'email': email,
                 'symptomes_texte': symptomes
             }
-            
+
             st.success("✅ Vos symptômes ont été analysés avec succès.")
-            
+
             if orientation == "URGENCE":
                 st.error("⚠️ Pour des raisons de sécurité, nous vous recommandons de consulter rapidement un médecin.")
                 st.warning("📞 N'hésitez pas à contacter le service des urgences si vos symptômes s'aggravent.")
             else:
                 st.info(f"💡 Un médecin vous a été recommandé. Vous pouvez maintenant prendre un rendez-vous.")
-    
+
     if hasattr(st.session_state, 'analyse_result') and st.session_state.analyse_result:
         st.markdown("---")
         st.subheader("📅 Choisir la date du rendez-vous")
-        
+
         maintenant = datetime.utcnow()
         date_min = maintenant.date()
         if maintenant.hour >= HEURE_FERMETURE:
             date_min = date_min + timedelta(days=1)
-        
+
         date_rdv = st.date_input(
             "Date du rendez-vous",
             min_value=date_min,
             value=date_min
         )
-        
+
         if st.button("📩 Prendre rendez-vous", key="prendre_rdv"):
             result = st.session_state.analyse_result
-            
+
             if not all([result['nom'], result['prenom'], result['age'], result['sexe'], result['telephone']]):
                 st.error("Veuillez remplir tous les champs obligatoires (*).")
             else:
@@ -861,7 +747,7 @@ def page_patient():
                         result['sexe'], result['telephone'], result['email'] if result['email'] else None
                     )
                     st.success("✅ Patient enregistré avec succès.")
-                
+
                 service_id = None
                 services = st.session_state.db.get_services()
                 for s in services:
@@ -870,25 +756,25 @@ def page_patient():
                         break
                 if not service_id:
                     service_id = 1
-                
+
                 generalistes = st.session_state.db.get_medecins_by_specialite("Généraliste")
                 if generalistes:
                     medecin_id = generalistes[0][0]
                     duree = generalistes[0][6]
-                    
+
                     date_rdv_str = date_rdv.strftime("%Y-%m-%d")
                     nouvelle_date, heure_proposee = st.session_state.db.calculer_prochain_creneau(
                         medecin_id, date_rdv_str, duree
                     )
-                    
+
                     messages_decalage = st.session_state.db.gerer_urgence_et_decaler(
                         service_id, nouvelle_date, heure_proposee, result['priorite']
                     )
-                    
+
                     if messages_decalage:
                         for msg in messages_decalage:
                             st.info(f"ℹ️ Un rendez-vous a été décalé de {msg['ancienne_heure']} à {msg['nouvelle_heure']}")
-                    
+
                     st.session_state.db.ajouter_rendez_vous(
                         patient_id=patient_id,
                         service_id=service_id,
@@ -899,7 +785,7 @@ def page_patient():
                         priorite=result['priorite'],
                         score_priorite=result['score']
                     )
-                    
+
                     st.success(f"""
                     ✅ Rendez-vous confirmé !
                     
@@ -919,33 +805,33 @@ def page_mes_rendez_vous():
     """Page patient - Consultation des rendez-vous"""
     st.title("📅 Mes rendez-vous")
     st.caption(f"🕐 Fuseau horaire : {FUSEAU_HORAIRE}")
-    
+
     st.info("🔍 Entrez votre nom et prénom pour consulter vos rendez-vous.")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         nom = st.text_input("Nom *", placeholder="Votre nom")
     with col2:
         prenom = st.text_input("Prénom *", placeholder="Votre prénom")
-    
+
     if st.button("🔍 Rechercher mes rendez-vous"):
         if not nom or not prenom:
             st.warning("Veuillez entrer votre nom et prénom.")
         else:
             patients = st.session_state.db.get_patient_by_nom_prenom(nom, prenom)
-            
+
             if not patients:
                 st.error("❌ Aucun patient trouvé avec ce nom et prénom.")
                 return
-            
+
             if len(patients) > 1:
                 st.warning(f"⚠️ Plusieurs patients trouvés ({len(patients)}). Veuillez préciser.")
                 for p in patients:
                     st.info(f"{p[2]} {p[1]} - Téléphone: {p[5]}")
-            
+
             patient = patients[0]
             rdvs = st.session_state.db.get_rendez_vous_by_patient(patient[0])
-            
+
             if not rdvs:
                 st.info("📭 Aucun rendez-vous trouvé pour ce patient.")
             else:
@@ -953,13 +839,13 @@ def page_mes_rendez_vous():
                 for rdv in rdvs:
                     est_annule_auto = rdv[16] if len(rdv) > 16 else 0
                     est_decale = rdv[18] if len(rdv) > 18 else 0
-                    
+
                     statut_fr = {
                         'en_attente': '⏳ En attente',
                         'confirme': '✅ Confirmé',
                         'annule': '❌ Annulé'
                     }.get(rdv[8], rdv[8])
-                    
+
                     if est_annule_auto == 1:
                         statut_fr = "❌ Annulé"
                         info = "⏰ Rendez-vous annulé automatiquement (délai dépassé)"
@@ -968,29 +854,27 @@ def page_mes_rendez_vous():
                         if est_decale == 1:
                             ancienne_heure = rdv[19] if len(rdv) > 19 else "inconnue"
                             info = f"🔄 Décalé de {ancienne_heure} suite à une urgence"
-                        
+
                         maintenant = datetime.utcnow()
                         date_rdv_obj = datetime.strptime(rdv[5], "%Y-%m-%d")
                         heure_rdv_obj = datetime.strptime(rdv[6], "%H:%M").time()
-                        
+
                         if rdv[8] != 'annule' and (
                             date_rdv_obj.date() < maintenant.date() or 
                             (date_rdv_obj.date() == maintenant.date() and heure_rdv_obj < maintenant.time())
                         ):
                             info = "⚠️ L'heure de votre rendez-vous est dépassée."
-                    
-                    # ✅ Colonnes pour le patient : Service (nom du service), Infos (toutes les informations)
+
                     rdv_data = {
                         'Date': rdv[5],
                         'Heure': rdv[6],
-                        'Service': rdv[-1] if len(rdv) > 15 else 'Généraliste',  # Nom du service
+                        'Service': rdv[-1] if len(rdv) > 15 else 'Généraliste',
                         'Infos': info if info else f"Symptômes: {rdv[10][:100] if rdv[10] else 'Non renseignés'}"
                     }
                     data.append(rdv_data)
-                
+
                 st.dataframe(pd.DataFrame(data), use_container_width=True)
-                
-                # Afficher les informations supplémentaires
+
                 for item in data:
                     if item['Infos'] and "annulé" in item['Infos']:
                         st.warning(f"⏰ {item['Infos']}")
@@ -1001,27 +885,26 @@ def page_mes_rendez_vous():
 
 
 def page_dashboard_medecin():
-    """Dashboard médecin - Ne voit que ses propres patients"""
     if not st.session_state.logged_in:
         st.warning("⚠️ Veuillez vous connecter.")
         return
-    
+
     medecin = st.session_state.user
     st.title(f"👨‍⚕️ Dr. {medecin[2]} {medecin[1]}")
     st.caption(f"Spécialité: {medecin[3]}")
     st.caption(f"🕐 Fuseau horaire : {FUSEAU_HORAIRE}")
-    
+
     messages = st.session_state.db.verifier_et_annuler_rdv_passes()
     if messages:
         for msg in messages:
             st.warning(f"⏰ Rendez-vous de {msg['patient']} du {msg['date']} à {msg['heure']} annulé automatiquement.")
-    
+
     menu = st.tabs(["📋 Mes patients en attente", "📅 Mon agenda", "👤 Rechercher un patient"])
-    
+
     with menu[0]:
         st.subheader("Mes patients en attente de consultation")
         rdvs = st.session_state.db.get_rendez_vous_en_attente(medecin[0])
-        
+
         if not rdvs:
             st.info("✅ Aucun patient en attente.")
         else:
@@ -1031,19 +914,19 @@ def page_dashboard_medecin():
                 patient_prenom = rdv[-1] if len(rdv) > 16 else ""
                 priorite_fr = {0: 'Faible', 1: 'Moyenne', 2: 'Élevée', 3: 'URGENCE'}.get(rdv[9], 'Faible')
                 service_nom = rdv[-3] if len(rdv) > 16 else "Généraliste"
-                
+
                 maintenant = datetime.utcnow()
                 date_rdv_obj = datetime.strptime(rdv[5], "%Y-%m-%d")
                 heure_rdv_obj = datetime.strptime(rdv[6], "%H:%M").time()
-                
+
                 if date_rdv_obj.date() < maintenant.date() or (date_rdv_obj.date() == maintenant.date() and heure_rdv_obj < maintenant.time()):
                     statut = "⚠️ Délai dépassé"
                 else:
                     statut = "En attente"
-                
+
                 est_decale = rdv[18] if len(rdv) > 18 else 0
                 info = "🔄 Décalé (urgence)" if est_decale == 1 else ""
-                
+
                 data.append({
                     'ID': rdv[0],
                     'Patient': f"{patient_prenom} {patient_nom}",
@@ -1055,15 +938,15 @@ def page_dashboard_medecin():
                     'Statut': statut,
                     'Info': info
                 })
-            
+
             if data:
                 st.dataframe(pd.DataFrame(data), use_container_width=True)
-                
+
                 st.subheader("📝 Consultation et orientation")
                 rdv_id = st.selectbox("Sélectionnez un patient", 
                                      options=[rdv['ID'] for rdv in data if rdv['Statut'] != "⚠️ Délai dépassé"],
                                      format_func=lambda x: f"{next(r['Patient'] for r in data if r['ID'] == x)} ({r['Heure']})")
-                
+
                 if rdv_id:
                     conn = st.session_state.db.get_connection()
                     cursor = conn.cursor()
@@ -1075,7 +958,7 @@ def page_dashboard_medecin():
                     """, (rdv_id,))
                     rdv_data = cursor.fetchone()
                     conn.close()
-                    
+
                     if rdv_data:
                         st.info(f"""
                         **Patient:** {rdv_data[-4]} {rdv_data[-5]}  
@@ -1084,7 +967,7 @@ def page_dashboard_medecin():
                         **Téléphone:** {rdv_data[-1]}  
                         **Symptômes:** {rdv_data[10] if rdv_data[10] else 'Non renseignés'}
                         """)
-                        
+
                         with st.form("consultation_form"):
                             diagnostic = st.text_area("Diagnostic", height=100)
                             service_orientation = st.selectbox(
@@ -1092,14 +975,14 @@ def page_dashboard_medecin():
                                 [s[1] for s in st.session_state.db.get_services()]
                             )
                             submitted = st.form_submit_button("✅ Valider et orienter")
-                            
+
                             if submitted and diagnostic:
                                 service_id = None
                                 for s in st.session_state.db.get_services():
                                     if s[1] == service_orientation:
                                         service_id = s[0]
                                         break
-                                
+
                                 specialistes = st.session_state.db.get_medecins_by_specialite(service_orientation)
                                 if specialistes:
                                     specialiste = specialistes[0]
@@ -1127,12 +1010,12 @@ def page_dashboard_medecin():
                                     )
                                     st.success(f"✅ Patient orienté vers {service_orientation}.")
                                 st.rerun()
-    
+
     with menu[1]:
         st.subheader("📅 Mon agenda")
         date_agenda = st.date_input("Date", value=datetime.utcnow().date())
         rdvs = st.session_state.db.get_rendez_vous_by_medecin(medecin[0], date_agenda.strftime("%Y-%m-%d"))
-        
+
         if not rdvs:
             st.info("📭 Aucun rendez-vous pour cette date.")
         else:
@@ -1153,7 +1036,7 @@ def page_dashboard_medecin():
                     'Info': info
                 })
             st.dataframe(pd.DataFrame(data), use_container_width=True)
-    
+
     with menu[2]:
         st.subheader("🔍 Rechercher un patient")
         col1, col2 = st.columns(2)
@@ -1161,11 +1044,11 @@ def page_dashboard_medecin():
             nom_rech = st.text_input("Nom", placeholder="Koffi")
         with col2:
             prenom_rech = st.text_input("Prénom", placeholder="Jean")
-        
+
         if st.button("🔍 Rechercher"):
             if nom_rech or prenom_rech:
                 patients = st.session_state.db.get_patient_by_nom_prenom(nom_rech, prenom_rech)
-                
+
                 if patients:
                     for p in patients:
                         st.info(f"""
@@ -1179,7 +1062,7 @@ def page_dashboard_medecin():
                     st.warning("❌ Aucun patient trouvé.")
             else:
                 st.warning("Veuillez entrer un nom ou prénom.")
-    
+
     if st.button("🚪 Déconnexion"):
         st.session_state.logged_in = False
         st.session_state.user = None
@@ -1189,27 +1072,26 @@ def page_dashboard_medecin():
 
 
 def page_dashboard_admin():
-    """Dashboard administration - Voit tout"""
     if not st.session_state.logged_in:
         st.warning("⚠️ Veuillez vous connecter.")
         return
-    
+
     admin = st.session_state.user
     st.title(f"👨‍💼 Administration - {admin[2]} {admin[1]}")
     st.caption(f"🕐 Fuseau horaire : {FUSEAU_HORAIRE}")
-    
+
     messages = st.session_state.db.verifier_et_annuler_rdv_passes()
     if messages:
         for msg in messages:
             st.warning(f"⏰ Rendez-vous de {msg['patient']} du {msg['date']} à {msg['heure']} annulé automatiquement.")
-    
-    menu = st.tabs(["📊 Vue d'ensemble", "👤 Tous les patients", "📅 Tous les rendez-vous", "👨‍⚕️ Médecins"])
-    
+
+    menu = st.tabs(["📊 Vue d'ensemble", "👤 Tous les patients", "📅 Tous les rendez-vous"])
+
     with menu[0]:
         st.subheader("📊 Statistiques globales")
-        
+
         col1, col2, col3, col4 = st.columns(4)
-        
+
         conn = st.session_state.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM patients")
@@ -1223,7 +1105,7 @@ def page_dashboard_admin():
         cursor.execute("SELECT COUNT(*) FROM rendez_vous WHERE decale_urgence = 1")
         nb_decales = cursor.fetchone()[0]
         conn.close()
-        
+
         with col1:
             st.metric("👤 Patients", nb_patients)
         with col2:
@@ -1232,9 +1114,9 @@ def page_dashboard_admin():
             st.metric("⏳ En attente", nb_attente)
         with col4:
             st.metric("❌ Annulés auto", nb_annules)
-        
+
         st.metric("🔄 Décalés (urgence)", nb_decales)
-        
+
         conn = st.session_state.db.get_connection()
         df = pd.read_sql_query("""
             SELECT date_rdv, COUNT(*) as nb
@@ -1245,12 +1127,12 @@ def page_dashboard_admin():
             LIMIT 30
         """, conn)
         conn.close()
-        
+
         if not df.empty:
             st.subheader("📈 Évolution des rendez-vous")
             fig = px.line(df, x='date_rdv', y='nb', title='Rendez-vous par jour')
             st.plotly_chart(fig, use_container_width=True)
-    
+
     with menu[1]:
         st.subheader("👤 Tous les patients")
         col1, col2 = st.columns(2)
@@ -1258,7 +1140,7 @@ def page_dashboard_admin():
             nom_rech = st.text_input("Nom", placeholder="Koffi")
         with col2:
             prenom_rech = st.text_input("Prénom", placeholder="Jean")
-        
+
         conn = st.session_state.db.get_connection()
         cursor = conn.cursor()
         if nom_rech or prenom_rech:
@@ -1271,7 +1153,7 @@ def page_dashboard_admin():
             cursor.execute("SELECT * FROM patients ORDER BY nom")
         patients = cursor.fetchall()
         conn.close()
-        
+
         if patients:
             data = []
             for p in patients:
@@ -1287,11 +1169,11 @@ def page_dashboard_admin():
             st.dataframe(pd.DataFrame(data), use_container_width=True)
         else:
             st.info("📭 Aucun patient trouvé.")
-    
+
     with menu[2]:
         st.subheader("📅 Tous les rendez-vous")
         rdvs = st.session_state.db.get_all_rendez_vous()
-        
+
         if rdvs:
             data = []
             for rdv in rdvs:
@@ -1316,25 +1198,7 @@ def page_dashboard_admin():
             st.dataframe(pd.DataFrame(data), use_container_width=True)
         else:
             st.info("📭 Aucun rendez-vous trouvé.")
-    
-    with menu[3]:
-        st.subheader("👨‍⚕️ Liste des médecins")
-        medecins = st.session_state.db.get_all_medecins()
-        if medecins:
-            data = []
-            for m in medecins:
-                data.append({
-                    'ID': m[0],
-                    'Nom': m[1],
-                    'Prénom': m[2],
-                    'Spécialité': m[3],
-                    'Email': m[4],
-                    'Durée': f"{m[6]} min"
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True)
-        else:
-            st.info("📭 Aucun médecin trouvé.")
-    
+
     if st.button("🚪 Déconnexion"):
         st.session_state.logged_in = False
         st.session_state.user = None
@@ -1346,18 +1210,18 @@ def page_dashboard_admin():
 # ==================== MAIN ====================
 def main():
     init_session_state()
-    
+
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/4325/4325546.png", width=60)
         st.title("🏥 Gestion Hospitalière")
         st.caption(f"🕐 {FUSEAU_HORAIRE}")
         st.markdown("---")
-        
+
         if st.session_state.logged_in:
             role = "Administrateur" if st.session_state.role == "admin" else "Médecin"
             st.success(f"👨‍⚕️ {role}: {st.session_state.user[2]} {st.session_state.user[1]}")
             st.markdown("---")
-        
+
         if st.session_state.logged_in:
             if st.session_state.role == "admin":
                 if st.button("📊 Administration"):
@@ -1380,11 +1244,11 @@ def main():
             if st.button("🔐 Se connecter"):
                 st.session_state.page = "Connexion"
                 st.rerun()
-        
+
         st.markdown("---")
         st.caption("© 2026 - Projet PHY330")
         st.caption("Version 5.0")
-    
+
     if st.session_state.logged_in:
         if st.session_state.role == "admin":
             if st.session_state.page == "Dashboard Admin":
