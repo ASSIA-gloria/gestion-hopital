@@ -323,7 +323,7 @@ def get_rendez_vous_en_attente(self, medecin_id=None):
         rdvs = cursor.fetchall()
         conn.close()
         return rdvs
-    class Database:
+class Database:
     def __init__(self, db_path="data/hopital.db"):
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db_path = db_path
