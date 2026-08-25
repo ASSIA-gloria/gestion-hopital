@@ -891,7 +891,6 @@ def page_mes_rendez_vous():
                         'annule': '❌ Annulé'
                     }.get(rdv[8], rdv[8])
                     
-                    # Vérifier si le rendez-vous a été décalé pour urgence
                     est_decale = rdv[18] if len(rdv) > 18 else 0
                     
                     if est_annule_auto == 1:
@@ -904,20 +903,22 @@ def page_mes_rendez_vous():
                             'Info': "⏰ Votre rendez-vous a été annulé car l'heure est dépassée."
                         }
                     else:
-                        # ✅ PRIORITÉ SUPPRIMÉE POUR LE PATIENT
                         if est_decale == 1:
                             ancienne_heure = rdv[19] if len(rdv) > 19 else "inconnue"
                             info = f"🔄 Décalé de {ancienne_heure} suite à une urgence"
                         else:
                             info = ""
                         
-                        # Vérifier si le rendez-vous est déjà passé
+                        # ✅ CORRECTION : Comparaison correcte des dates
                         maintenant = datetime.utcnow()
                         date_rdv_obj = datetime.strptime(rdv[5], "%Y-%m-%d")
                         heure_rdv_obj = datetime.strptime(rdv[6], "%H:%M").time()
                         
-                        if rdv[8] != 'annule' and (date_rdv_obj < maintenant.date() or 
-                           (date_rdv_obj == maintenant.date() and heure_rdv_obj < maintenant.time())):
+                        # Vérifier si le rendez-vous est déjà passé
+                        if rdv[8] != 'annule' and (
+                            date_rdv_obj.date() < maintenant.date() or 
+                            (date_rdv_obj.date() == maintenant.date() and heure_rdv_obj < maintenant.time())
+                        ):
                             statut_fr = "⚠️ Heure dépassée (en attente d'annulation)"
                             info = "⚠️ L'heure de votre rendez-vous est dépassée."
                         
