@@ -323,7 +323,115 @@ def get_rendez_vous_en_attente(self, medecin_id=None):
         rdvs = cursor.fetchall()
         conn.close()
         return rdvs
+    class Database:
+    def __init__(self, db_path="data/hopital.db"):
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        self.db_path = db_path
+        self.init_tables()
     
+    def get_connection(self):
+        return sqlite3.connect(self.db_path)
+    
+    def init_tables(self):
+        # ... code existant ...
+    
+    def ajouter_patient(self, nom, prenom, age, sexe, telephone, email=None):
+        # ... code existant ...
+    
+    def get_patient_by_nom_prenom(self, nom, prenom):
+        # ... code existant ...
+    
+    def get_patient_by_id(self, patient_id):
+        # ... code existant ...
+    
+    def get_medecin_by_email(self, email):
+        # ... code existant ...
+    
+    def get_medecin_by_id(self, medecin_id):
+        # ... code existant ...
+    
+    def get_medecins_by_specialite(self, specialite):
+        # ... code existant ...
+    
+    def get_all_medecins(self):
+        # ... code existant ...
+    
+    def get_services(self):
+        # ... code existant ...
+    
+    def ajouter_rendez_vous(self, patient_id, service_id, date_rdv, heure_rdv, 
+                           symptomes=None, medecin_generaliste_id=None, 
+                           medecin_specialiste_id=None, priorite=0, score_priorite=0):
+        # ... code existant ...
+    
+    def get_rendez_vous_by_patient(self, patient_id):
+        # ... code existant ...
+    
+    def get_rendez_vous_by_medecin(self, medecin_id, date=None):
+        # ... code existant ...
+    
+    def get_rendez_vous_en_attente(self, medecin_id=None):
+        # ... code existant ...
+    
+    def get_all_rendez_vous(self):
+        # ... code existant ...
+    
+    def verifier_et_annuler_rdv_passes(self):   # ← AJOUTER ICI
+        """Vérifie et annule automatiquement les rendez-vous dont l'heure est dépassée"""
+        maintenant = datetime.utcnow()
+        date_actuelle = maintenant.strftime("%Y-%m-%d")
+        heure_actuelle = maintenant.strftime("%H:%M")
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT r.*, p.nom, p.prenom, p.telephone
+            FROM rendez_vous r
+            JOIN patients p ON r.patient_id = p.id
+            WHERE r.statut IN ('en_attente', 'confirme')
+            AND r.annule_automatique = 0
+            AND (
+                r.date_rdv < ? 
+                OR (r.date_rdv = ? AND r.heure_rdv < ?)
+            )
+        ''', (date_actuelle, date_actuelle, heure_actuelle))
+        
+        rdvs_expires = cursor.fetchall()
+        messages = []
+        
+        for rdv in rdvs_expires:
+            cursor.execute('''
+                UPDATE rendez_vous 
+                SET statut = 'annule', annule_automatique = 1, heure_annulation = ?
+                WHERE id = ?
+            ''', (heure_actuelle, rdv[0]))
+            
+            patient_nom = rdv[-3] if len(rdv) > 16 else "Patient"
+            patient_prenom = rdv[-2] if len(rdv) > 16 else ""
+            messages.append({
+                'patient': f"{patient_prenom} {patient_nom}",
+                'telephone': rdv[-1] if len(rdv) > 16 else "Non renseigné",
+                'date': rdv[5],
+                'heure': rdv[6],
+                'rdv_id': rdv[0]
+            })
+        
+        conn.commit()
+        conn.close()
+        return messages
+    
+    def update_rendez_vous(self, rdv_id, **kwargs):
+        # ... code existant ...
+    
+    def get_heure_gmt0(self):
+        # ... code existant ...
+    
+    def calculer_prochain_creneau(self, medecin_id, date_rdv, duree_consultation=15):
+        # ... code existant ...
+    
+    def gerer_urgence_et_decaler(self, service_id, date_rdv, heure_rdv, priorite):
+        # ... code existant ...
     def update_rendez_vous(self, rdv_id, **kwargs):
         conn = self.get_connection()
         cursor = conn.cursor()
