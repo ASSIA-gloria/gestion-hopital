@@ -691,7 +691,6 @@ def page_connexion():
         st.session_state.page = "Accueil"
         st.rerun()
 
-
 def page_patient():
     """Page patient pour prendre un rendez-vous"""
     st.title("📋 Prendre un rendez-vous")
@@ -728,6 +727,7 @@ def page_patient():
             orientation, message = TriageMedecin.orienter_patient(score)
             service_suggere = TriageMedecin.suggerer_service(symptomes_list)
             
+            # Stocker les résultats (la priorité est stockée MAIS PAS AFFICHÉE)
             st.session_state.analyse_result = {
                 'score': score,
                 'priorite': priorite,
@@ -745,10 +745,11 @@ def page_patient():
                 'symptomes_texte': symptomes
             }
             
+            # ✅ AFFICHAGE NEUTRE - SANS MENTION DE PRIORITÉ
             st.success("✅ Vos symptômes ont été analysés avec succès.")
             
             if orientation == "URGENCE":
-                st.error("⚠️ Pour des raisons de sécurité, vous serez prioritaire dans le service.")
+                st.error("⚠️ Pour des raisons de sécurité, nous vous recommandons de consulter rapidement un médecin.")
                 st.warning("📞 N'hésitez pas à contacter le service des urgences si vos symptômes s'aggravent.")
             else:
                 st.info(f"💡 Un médecin vous a été recommandé. Vous pouvez maintenant prendre un rendez-vous.")
@@ -830,8 +831,7 @@ def page_patient():
                         score_priorite=result['score']
                     )
                     
-                    niveau_priorite = "URGENT" if result['priorite'] >= 2 else "Normal"
-                    
+                    # ✅ CONFIRMATION SANS PRIORITÉ
                     st.success(f"""
                     ✅ Rendez-vous confirmé !
                     
@@ -839,7 +839,6 @@ def page_patient():
                     🕐 Heure: {heure_proposee}
                     🏥 Service: {result['service']}
                     👨‍⚕️ Médecin: Dr. {generalistes[0][2]} {generalistes[0][1]}
-                    📊 Priorité: {niveau_priorite}
                     
                     ℹ️ Veuillez arriver 10 minutes avant l'heure prévue.
                     ⚠️ En cas de retard de plus de 10 minutes, votre rendez-vous sera annulé automatiquement.
@@ -902,12 +901,10 @@ def page_mes_rendez_vous():
                             'Heure': rdv[6],
                             'Service': rdv[-1] if len(rdv) > 15 else 'Généraliste',
                             'Statut': statut_fr,
-                            'Priorité': 'Annulé',
                             'Info': "⏰ Votre rendez-vous a été annulé car l'heure est dépassée."
                         }
                     else:
-                        priorite_fr = {0: 'Faible', 1: 'Moyenne', 2: 'Élevée', 3: 'URGENCE'}.get(rdv[9], 'Faible')
-                        
+                        # ✅ PRIORITÉ SUPPRIMÉE POUR LE PATIENT
                         if est_decale == 1:
                             ancienne_heure = rdv[19] if len(rdv) > 19 else "inconnue"
                             info = f"🔄 Décalé de {ancienne_heure} suite à une urgence"
@@ -929,7 +926,6 @@ def page_mes_rendez_vous():
                             'Heure': rdv[6],
                             'Service': rdv[-1] if len(rdv) > 15 else 'Généraliste',
                             'Statut': statut_fr,
-                            'Priorité': priorite_fr,
                             'Info': info
                         }
                     
