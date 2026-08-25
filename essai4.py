@@ -278,36 +278,36 @@ class Database:
         conn.close()
         return rdvs
     
-    def get_rendez_vous_en_attente(self, medecin_id=None):
-        """Récupère les rendez-vous en attente (filtrés par médecin si fourni)"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        if medecin_id:
-            cursor.execute('''
-                SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
-                       s.nom as service_nom
-                FROM rendez_vous r
-                JOIN patients p ON r.patient_id = p.id
-                LEFT JOIN services s ON r.service_id = s.id
-                WHERE r.statut = 'en_attente'
-                AND r.annule_automatique = 0
-                AND (r.medecin_generaliste_id = ? OR r.medecin_specialiste_id = ?)
-                ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
-            ''', (medecin_id, medecin_id))
-        else:
-            cursor.execute('''
-                SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
-                       s.nom as service_nom
-                FROM rendez_vous r
-                JOIN patients p ON r.patient_id = p.id
-                LEFT JOIN services s ON r.service_id = s.id
-                WHERE r.statut = 'en_attente'
-                AND r.annule_automatique = 0
-                ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
-            ''')
-        rdvs = cursor.fetchall()
-        conn.close()
-        return rdvs
+def get_rendez_vous_en_attente(self, medecin_id=None):
+    """Récupère les rendez-vous en attente (filtrés par médecin si fourni)"""
+    conn = self.get_connection()
+    cursor = conn.cursor()
+    if medecin_id:
+        cursor.execute('''
+            SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
+                   s.nom as service_nom
+            FROM rendez_vous r
+            JOIN patients p ON r.patient_id = p.id
+            LEFT JOIN services s ON r.service_id = s.id
+            WHERE r.statut = 'en_attente'
+            AND r.annule_automatique = 0
+            AND (r.medecin_generaliste_id = ? OR r.medecin_specialiste_id = ?)
+            ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
+        ''', (medecin_id, medecin_id))
+    else:
+        cursor.execute('''
+            SELECT r.*, p.nom as patient_nom, p.prenom as patient_prenom,
+                   s.nom as service_nom
+            FROM rendez_vous r
+            JOIN patients p ON r.patient_id = p.id
+            LEFT JOIN services s ON r.service_id = s.id
+            WHERE r.statut = 'en_attente'
+            AND r.annule_automatique = 0
+            ORDER BY r.priorite DESC, r.date_rdv, r.heure_rdv
+        ''')
+    rdvs = cursor.fetchall()
+    conn.close()
+    return rdvs
     
     def get_all_rendez_vous(self):
         conn = self.get_connection()
